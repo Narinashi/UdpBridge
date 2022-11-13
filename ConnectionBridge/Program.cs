@@ -30,13 +30,14 @@ namespace ConnectionBridge
 
 				if (_ServerMode)
 				{
-					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
+					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));				
 				}
 				else
 				{
 					await StartClientMode(args[1], int.Parse(args[2]), args[3], int.Parse(args[4]), args[5], int.Parse(args[6]));
-					while (Console.ReadKey().Key != ConsoleKey.Q) ;
 				}
+
+				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}
 			else if (args?.Length == 1)
 			{
@@ -71,8 +72,8 @@ namespace ConnectionBridge
 											PromptIntParameter("udpServerRemotePort")
 											);
 
-					while (Console.ReadKey().Key != ConsoleKey.Q) ;
 				}
+				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}
 
 #if DEBUG
@@ -115,7 +116,6 @@ namespace ConnectionBridge
 		{
 			var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
 			secureChannel.StartReceiving();
-			await secureChannel.Authenticate();
 
 			_ConnectionBridge = new ConnectionBridge(secureChannel,
 													string.Empty,

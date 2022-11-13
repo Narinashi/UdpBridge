@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -61,27 +62,41 @@ namespace ConnectionBridge
 		}
 		
 		public void StartReceiving()
-		{
-			_Client.BeginReceive(_EndReceiveCallback, null);
+		{		
+			_Client.BeginReceive(_EndReceiveCallback, null);			
 		}
 
 		public void SendBack(byte[] buffer, int length)
 		{
 			if (RemoteEndPoint == null)
 				throw new InvalidOperationException("No target endpoint has been set (Or use a overload that accepts a IPEndPoint)");
-			
-			var sentBytes = _Client.Send(buffer, length);
+			try
+			{
+				var sentBytes = _Client.Send(buffer, length);
 
-			if (sentBytes != length)
-				Logger.Warning($"UdpClient didnt sent whole buffer, expected:{length}, sent:{sentBytes}");
+
+				if (sentBytes != length)
+					Logger.Warning($"UdpClient didnt sent whole buffer, expected:{length}, sent:{sentBytes}");
+			}
+			catch(Exception ex)
+			{
+				Logger.Error($"An exception occured in SendBack UdpBridge, \r\n{ex}");
+			}
 		}
 
 		public void Send(byte[] buffer, int length, IPEndPoint target)
 		{
-			var sentBytes = _Client.Send(buffer, length, target);
+			try
+			{
+				var sentBytes = _Client.Send(buffer, length, target);
 
-			if (sentBytes != length)
-				Logger.Warning($"UdpClient didnt sent whole buffer, expected:{length}, sent:{sentBytes}");
+				if (sentBytes != length)
+					Logger.Warning($"UdpClient didnt sent whole buffer, expected:{length}, sent:{sentBytes}");
+			}
+			catch(Exception ex)
+			{
+				Logger.Error($"An exception occured in SendBack UdpBridge, \r\n{ex}");
+			}
 		}
 
 		public void ResetPeer()
@@ -108,13 +123,16 @@ namespace ConnectionBridge
 					del(_MessageReceivedArgs);
 				else
 					Logger.Warning($"Packet received from {_MessageReceivedArgs.EndPoint} which doesnt have any listener registered for");
-			}
+				
+				_Client.BeginReceive(_EndReceiveCallback, null);
+			}		
 			catch (Exception ex)
 			{
 				Logger.Error($"An exception occured in EndReceive UdpBridge, \r\n{ex}");
-			}
 
-			_Client.BeginReceive(_EndReceiveCallback, null);
+				if(ex is not ObjectDisposedException && ex is not IOException)
+				_Client.BeginReceive(_EndReceiveCallback, null);
+			}
 		}
 
 		public void Dispose()

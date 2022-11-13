@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -32,6 +33,8 @@ namespace ConnectionBridge
 		{
 			_SecureChannel = channel ?? throw new ArgumentNullException(nameof(channel));
 
+			_ServerMode = serverMode;
+
 			if (_SecureChannel.PeerEndPoint is null)
 				throw new ArgumentException("TCP Connection hasnt been initiated yet");
 
@@ -46,8 +49,8 @@ namespace ConnectionBridge
 								new UdpServer(remotePort) :
 								new UdpServer(remoteAddress, remotePort);
 
-			_LocalUdpServer.AddListener(_SecureChannel.PeerEndPoint.Address.MapToIPv4(), OnLocalUdpServerMessageReceived);
-			_RemoteUdpServer.AddListener(_SecureChannel.PeerEndPoint.Address.MapToIPv4(), OnRemoteUdpServerMessageReceived);
+			_LocalUdpServer.AddListener(_ServerMode ? _SecureChannel.PeerEndPoint.Address.MapToIPv4() : IPAddress.Any, OnLocalUdpServerMessageReceived);
+			_RemoteUdpServer.AddListener(_ServerMode ? IPAddress.Any : _SecureChannel.PeerEndPoint.Address.MapToIPv4(), OnRemoteUdpServerMessageReceived);
 
 			_Deserializer.OnMessageReceived = (message) =>
 			{
@@ -78,7 +81,6 @@ namespace ConnectionBridge
 				}
 			};
 
-			_ServerMode = serverMode;
 		}
 		public async Task Handshake()
 		{

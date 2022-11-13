@@ -121,6 +121,8 @@ namespace ConnectionBridge
 
 				if (_Listeners.TryGetValue(_MessageReceivedArgs.EndPoint.Address, out OnUdpMessageReceived del))
 					del(_MessageReceivedArgs);
+				else if (_Listeners.TryGetValue(IPAddress.Any, out OnUdpMessageReceived del2))
+					del2(_MessageReceivedArgs);
 				else
 					Logger.Warning($"Packet received from {_MessageReceivedArgs.EndPoint} which doesnt have any listener registered for");
 				

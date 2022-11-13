@@ -36,6 +36,8 @@ namespace ConnectionBridge
 
 		readonly AsyncCallback _ReadAsyncCallback;
 
+		bool Disposed = false;
+
 		public static async Task<SecureChannel> ConnectTo(string address, int port, string targetHostMachineName, int bufferSize)
 		{
 			if (string.IsNullOrWhiteSpace(address))
@@ -145,6 +147,9 @@ namespace ConnectionBridge
 				return;
 			}
 
+			if (Disposed)
+				return;
+
 			_DataReceivedArgs.Length = readBytes;
 
 			if (_CancelationToken.Token.IsCancellationRequested || !_Client.Connected || readBytes == 0)
@@ -152,7 +157,7 @@ namespace ConnectionBridge
 				Dispose();
 				OnClientDisconnected?.Invoke();
 				return;
-			}  
+			}
 
 			OnDataReceived?.Invoke(_DataReceivedArgs);
 
@@ -175,8 +180,12 @@ namespace ConnectionBridge
 
 		public void Dispose()
 		{
+			if (Disposed)
+				return;
+
 			_SecureStream.Dispose();
 			_Client.Dispose();
+			Disposed = true;
 		}
 	}
 }

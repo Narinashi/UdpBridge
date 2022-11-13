@@ -129,6 +129,12 @@ namespace ConnectionBridge
 				//skip the identifier part
 				//add deobfuscation and such here (later)
 				_RemoteUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
+
+#if DEBUG
+				//Send back whatever it receives (debug purposes :^) )
+				Logger.Info("debug mode, sending back clients data");
+				_LocalUdpServer.SendBack(message.Buffer, message.Buffer.Length);
+#endif
 			}
 			else
 			{

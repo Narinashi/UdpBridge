@@ -30,7 +30,7 @@ namespace ConnectionBridge
 
 				if (_ServerMode)
 				{
-					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));				
+					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
 				}
 				else
 				{
@@ -88,16 +88,16 @@ namespace ConnectionBridge
 				Console.WriteLine("local app on client sends to server");
 				localAppOnClient.Send(buffer, buffer.Length, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1111));
 
-				var recevingBuffer = localAppOnServer.Receive(ref ep);
+				var recevingBuffer = localAppOnClient.Receive(ref ep);
 
 				Console.WriteLine("local app on server receives");
 				Console.WriteLine("local app on server wants to send to client");
 
-				localAppOnServer.Send(recevingBuffer, recevingBuffer.Length, ep);
+				//localAppOnServer.Send(recevingBuffer, recevingBuffer.Length, ep);
 
-				var sendingBuffer = localAppOnClient.Receive(ref ep);
+				//var sendingBuffer = localAppOnClient.Receive(ref ep);
 
-				Debug.Assert(recevingBuffer.SequenceEqual(sendingBuffer));
+				//Debug.Assert(recevingBuffer.SequenceEqual(sendingBuffer));
 
 				Console.WriteLine("local app on client receives from server");
 
@@ -146,7 +146,16 @@ namespace ConnectionBridge
 				client.StartReceiving();
 
 				if (_ConnectionBridge != null)
+				{
 					client.Dispose(); //shoosh whoever wants to connect unless the previous one disconnects
+					return;
+				}
+
+				_ConnectionBridge = new ConnectionBridge(client,
+														string.Empty,
+														udpServerLocalPort,
+														udpServerRemoteAddress,
+														udpServerRemotePort, true);
 
 				client.OnClientDisconnected = () =>
 				{
@@ -154,11 +163,7 @@ namespace ConnectionBridge
 					_ConnectionBridge = null;
 				};
 
-				_ConnectionBridge = new ConnectionBridge(client,
-														string.Empty,
-														udpServerLocalPort,
-														udpServerRemoteAddress,
-														udpServerRemotePort, true);
+				
 			};
 
 

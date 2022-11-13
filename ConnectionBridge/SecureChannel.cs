@@ -102,9 +102,9 @@ namespace ConnectionBridge
 				throw new InvalidOperationException("Client is disconnected");
 
 			if (_Server)
-				await _SecureStream.AuthenticateAsServerAsync(_Certificate, false, SslProtocols.Tls12, false);
+				await _SecureStream.AuthenticateAsServerAsync(_Certificate, false, SslProtocols.Tls12 | SslProtocols.Tls11, false);
 			else
-				await _SecureStream.AuthenticateAsClientAsync(_TargetHostMachineName, null, SslProtocols.Tls12, true);
+				await _SecureStream.AuthenticateAsClientAsync(_TargetHostMachineName, null, SslProtocols.Tls12 | SslProtocols.Tls11, true);
 		}
 
 		public async Task Send(byte[] buffer)

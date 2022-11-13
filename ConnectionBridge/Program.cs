@@ -1,8 +1,10 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+
+using System.Diagnostics;
 
 using System.Net;
 using System.Net.Sockets;
@@ -19,9 +21,12 @@ namespace ConnectionBridge
 		static bool _ServerMode;
 		static async Task Main(string[] args)
 		{
-			if (args?.Any() ?? false)
+			if (args?.Length > 1)
 			{
 				_ServerMode = bool.Parse(args[0]);
+
+				for (int i = 0; i < args.Length; i++)
+					args[i] = args[i].Replace("\"", string.Empty);
 
 				if (_ServerMode)
 				{
@@ -33,7 +38,7 @@ namespace ConnectionBridge
 					while (Console.ReadKey().Key != ConsoleKey.Q) ;
 				}
 			}
-			else if (args?.Length == 0)
+			else if (args?.Length == 1)
 			{
 				Logger.Info("In order to run the program as server mode use these params");
 				Logger.Info(GetHowToRunMessage(true));
@@ -71,8 +76,8 @@ namespace ConnectionBridge
 			}
 
 #if DEBUG
-			var testUdp = new UdpClient();
-			var testudp2 = new UdpClient(9999);
+			var localAppOnClient = new UdpClient();
+			var localAppOnServer = new UdpClient(9999);
 
 			var buffer = Encoding.ASCII.GetBytes("010203040506070809101112131415161718192021222324252627282930");
 			var ep = new IPEndPoint(IPAddress.Any, 0);
@@ -80,16 +85,19 @@ namespace ConnectionBridge
 			while (true)
 			{
 				Console.WriteLine("local app on client sends to server");
-				testUdp.Send(buffer, buffer.Length, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1111));
+				localAppOnClient.Send(buffer, buffer.Length, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1111));
 
-				var recevingBuffer = testudp2.Receive(ref ep);
+				var recevingBuffer = localAppOnServer.Receive(ref ep);
 
 				Console.WriteLine("local app on server receives");
 				Console.WriteLine("local app on server wants to send to client");
 
-				testudp2.Send(recevingBuffer, recevingBuffer.Length, ep);
+				localAppOnServer.Send(recevingBuffer, recevingBuffer.Length, ep);
 
-				var sendingBuffer = testUdp.Receive(ref ep);
+				var sendingBuffer = localAppOnClient.Receive(ref ep);
+
+				Debug.Assert(recevingBuffer.SequenceEqual(sendingBuffer));
+
 				Console.WriteLine("local app on client receives from server");
 
 				Console.ReadLine();
@@ -98,12 +106,12 @@ namespace ConnectionBridge
 		}
 
 
-		static async Task StartClientMode(string	sslServerAddress,
-											int		sslServerPort,
-											string	trustedHostName,
-											int		udpServerLocalPort,
-											string	udpServerRemoteAddress,
-											int		udpServerRemotePort)
+		static async Task StartClientMode(string sslServerAddress,
+											int sslServerPort,
+											string trustedHostName,
+											int udpServerLocalPort,
+											string udpServerRemoteAddress,
+											int udpServerRemotePort)
 		{
 			var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
 			secureChannel.StartReceiving();
@@ -121,12 +129,12 @@ namespace ConnectionBridge
 
 
 
-		static Task StartServerMode(string		sslCertificateFileAddress,
-										string	sslCertificatePassword,
-										int		sslServerListeningPort,
-										int		udpServerLocalPort,
-										string	udpServerRemoteAddress,
-										int		udpServerRemotePort)
+		static Task StartServerMode(string sslCertificateFileAddress,
+										string sslCertificatePassword,
+										int sslServerListeningPort,
+										int udpServerLocalPort,
+										string udpServerRemoteAddress,
+										int udpServerRemotePort)
 		{
 			var cert = new X509Certificate2(sslCertificateFileAddress, sslCertificatePassword);
 			var listener = new SecureChannelListener(sslServerListeningPort, cert);
@@ -171,17 +179,8 @@ namespace ConnectionBridge
 
 		static string PromptStringParameter(string paramName)
 		{
-			while (true)
-			{
-				Console.WriteLine($"{paramName}: ");
-
-				string input = Console.ReadLine();
-
-				if (!string.IsNullOrWhiteSpace(input))
-					return input;
-
-				Console.WriteLine("Invalid input");
-			}
+			Console.WriteLine($"{paramName}: ");
+			return Console.ReadLine();
 		}
 
 		static int PromptIntParameter(string paramName)

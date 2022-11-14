@@ -124,6 +124,7 @@ namespace ConnectionBridge
 
 				var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
 				secureChannel.StartReceiving();
+				await secureChannel.Authenticate();
 
 				Logger.Info($"Initiating ConnectionBridge ...");
 
@@ -152,7 +153,7 @@ namespace ConnectionBridge
 
 
 
-		static void StartServerMode(string sslCertificateFileAddress,
+		static async Task StartServerMode(string sslCertificateFileAddress,
 										string sslCertificatePassword,
 										int sslServerListeningPort,
 										int udpServerLocalPort,
@@ -185,6 +186,9 @@ namespace ConnectionBridge
 					}
 
 					SecureChannel secureChannel = new(client, cert, 4096);
+					secureChannel.StartReceiving();
+
+					await secureChannel.Authenticate();
 
 					_ConnectionBridge = new ConnectionBridge(secureChannel,
 																string.Empty,

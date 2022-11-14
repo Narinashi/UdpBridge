@@ -28,6 +28,8 @@ namespace ConnectionBridge
 				for (int i = 0; i < args.Length; i++)
 					args[i] = args[i].Replace("\"", string.Empty);
 
+				Logger.LogLevel = args.Length > 7 && Enum.TryParse(args[7], true, out LogLevel ll) ? ll : LogLevel.Info;
+
 				if (_ServerMode)
 				{
 					StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
@@ -36,8 +38,6 @@ namespace ConnectionBridge
 				{
 					await StartClientMode(args[1], int.Parse(args[2]), args[3], int.Parse(args[4]), args[5], int.Parse(args[6]));
 				}
-
-				Logger.LogLevel = args.Length > 7 && Enum.TryParse(args[7], true, out LogLevel ll) ? ll : LogLevel.Info;
 
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}
@@ -118,22 +118,35 @@ namespace ConnectionBridge
 											string udpServerRemoteAddress,
 											int udpServerRemotePort)
 		{
-			Logger.Info($"Initiating in ClientMode ...");
+			try
+			{
+				Logger.Info($"Initiating in ClientMode ...");
 
-			var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
-			secureChannel.StartReceiving();
+				var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
+				secureChannel.StartReceiving();
 
-			Logger.Info($"Initiating ConnectionBridge ...");
+				Logger.Info($"Initiating ConnectionBridge ...");
 
-			_ConnectionBridge = new ConnectionBridge(secureChannel,
-													string.Empty,
-													udpServerLocalPort,
-													udpServerRemoteAddress,
-													udpServerRemotePort);
+				_ConnectionBridge = new ConnectionBridge(secureChannel,
+														string.Empty,
+														udpServerLocalPort,
+														udpServerRemoteAddress,
+														udpServerRemotePort);
 
-			await _ConnectionBridge.Handshake();
+				await _ConnectionBridge.Handshake();
 
-			Logger.Info($"ConnectionBridge Handshake complete");
+				Logger.Info($"ConnectionBridge Handshake complete");
+			}
+			catch(Exception ex)
+			{
+				Logger.Error($"An exception occurred while trying to connect to server, \r\n{ex}");
+				await StartClientMode(sslServerAddress, 
+										sslServerPort,
+										trustedHostName, 
+										udpServerLocalPort,
+										udpServerRemoteAddress, 
+										udpServerRemotePort);
+			}
 		}
 
 
@@ -159,12 +172,16 @@ namespace ConnectionBridge
 
 					TcpClient client = listener.AcceptConnection();
 
+					client.ReceiveTimeout = client.SendTimeout = 400000;
+
 					Logger.Info($"New TCP Connection from {client.Client?.RemoteEndPoint}");
 
 					if (_ConnectionBridge != null)
 					{
 						Logger.Debug("Connection bridge already instatiated, going to dispose the coming connection");
 						client.Dispose();
+
+						continue;
 					}
 
 					SecureChannel secureChannel = new(client, cert, 4096);

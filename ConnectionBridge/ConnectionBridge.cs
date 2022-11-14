@@ -126,21 +126,16 @@ namespace ConnectionBridge
 					return;
 				}
 
-				//skip the identifier part
-				//add deobfuscation and such here (later)
-				_RemoteUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
-
-				if(message.EndPoint.Address != _SecureChannel.PeerEndPoint.Address)
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Receving udp packets with correct session from {message.EndPoint.Address} but the tls session initiated from {_SecureChannel.PeerEndPoint.Address} ... passing through");
-				}
-
 				if(message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && 
 					message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
 				{
 					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
 					_LocalUdpServer.ResetPeer();
 				}
+
+				//skip the identifier part
+				//add deobfuscation and such here (later)
+				_RemoteUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
 
 #if DEBUG
 				//Send back whatever it receives (debug purposes :^) )

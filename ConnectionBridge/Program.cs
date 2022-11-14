@@ -32,7 +32,7 @@ namespace ConnectionBridge
 
 				if (_ServerMode)
 				{
-					StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
+					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
 				}
 				else
 				{

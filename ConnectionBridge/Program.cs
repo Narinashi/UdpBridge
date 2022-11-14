@@ -58,7 +58,7 @@ namespace ConnectionBridge
 
 				if (_ServerMode)
 				{
-					StartServerMode(PromptStringParameter("sslCertificateFileAddress"),
+					await StartServerMode(PromptStringParameter("sslCertificateFileAddress"),
 											PromptStringParameter("sslCertificatePassword"),
 											PromptIntParameter("sslServerListeningPort"),
 											PromptIntParameter("udpServerLocalPort"),
@@ -123,7 +123,6 @@ namespace ConnectionBridge
 				Logger.Info($"Initiating in ClientMode ...");
 
 				var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
-				await secureChannel.Authenticate();
 				secureChannel.StartReceiving();
 
 				Logger.Info($"Initiating ConnectionBridge ...");

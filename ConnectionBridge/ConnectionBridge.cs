@@ -135,7 +135,8 @@ namespace ConnectionBridge
 					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Receving udp packets with correct session from {message.EndPoint.Address} but the tls session initiated from {_SecureChannel.PeerEndPoint.Address} ... passing through");
 				}
 
-				if(message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
+				if(message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && 
+					message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
 				{
 					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
 					_LocalUdpServer.ResetPeer();
@@ -187,10 +188,11 @@ namespace ConnectionBridge
 					return;
 				}
 
-				if (message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
+				if (message.EndPoint.Address != _RemoteUdpServer.RemoteEndPoint.Address &&
+					message.EndPoint.Port != _RemoteUdpServer.RemoteEndPoint.Port)
 				{
 					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
-					_LocalUdpServer.ResetPeer();
+					_RemoteUdpServer.ResetPeer();
 				}
 
 				//skip the identifier part

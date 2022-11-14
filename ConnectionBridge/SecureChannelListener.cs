@@ -40,21 +40,9 @@ namespace ConnectionBridge
 			_Listener.Start();
 		}
 
-		public Task AcceptConnection()
+		public TcpClient AcceptConnection()
 		{
-			return Task.Factory.StartNew(async () =>
-			{
-				while (true)
-				{
-					var client = await _Listener.AcceptTcpClientAsync();
-
-					var secureChannel = new SecureChannel(client, _ServerCertificate, _BufferSize);
-					await secureChannel.Authenticate();
-
-					OnConnectionReceived?.Invoke(secureChannel);
-
-				}
-			}, TaskCreationOptions.LongRunning);
+			return _Listener.AcceptTcpClient();
 		}
 	}
 }

@@ -30,12 +30,14 @@ namespace ConnectionBridge
 
 				if (_ServerMode)
 				{
-					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
+					StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
 				}
 				else
 				{
 					await StartClientMode(args[1], int.Parse(args[2]), args[3], int.Parse(args[4]), args[5], int.Parse(args[6]));
 				}
+
+				Logger.LogLevel = args.Length > 7 && Enum.TryParse(args[7], true, out LogLevel ll) ? ll : LogLevel.Info;
 
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}
@@ -52,9 +54,11 @@ namespace ConnectionBridge
 				Console.WriteLine("Server mode ? (Y/N)");
 				_ServerMode = Console.ReadKey().Key == ConsoleKey.Y;
 
+				Logger.LogLevel = PromptEnumValue<LogLevel>("Logger log level");
+
 				if (_ServerMode)
 				{
-					await StartServerMode(PromptStringParameter("sslCertificateFileAddress"),
+					StartServerMode(PromptStringParameter("sslCertificateFileAddress"),
 											PromptStringParameter("sslCertificatePassword"),
 											PromptIntParameter("sslServerListeningPort"),
 											PromptIntParameter("udpServerLocalPort"),
@@ -114,8 +118,12 @@ namespace ConnectionBridge
 											string udpServerRemoteAddress,
 											int udpServerRemotePort)
 		{
+			Logger.Info($"Initiating in ClientMode ...");
+
 			var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
 			secureChannel.StartReceiving();
+
+			Logger.Info($"Initiating ConnectionBridge ...");
 
 			_ConnectionBridge = new ConnectionBridge(secureChannel,
 													string.Empty,
@@ -124,50 +132,63 @@ namespace ConnectionBridge
 													udpServerRemotePort);
 
 			await _ConnectionBridge.Handshake();
+
+			Logger.Info($"ConnectionBridge Handshake complete");
 		}
 
 
 
 
-		static Task StartServerMode(string sslCertificateFileAddress,
+		static void StartServerMode(string sslCertificateFileAddress,
 										string sslCertificatePassword,
 										int sslServerListeningPort,
 										int udpServerLocalPort,
 										string udpServerRemoteAddress,
 										int udpServerRemotePort)
 		{
+			Logger.Info($"Initiating in ServerMode ...");
+
 			var cert = new X509Certificate2(sslCertificateFileAddress, sslCertificatePassword);
 			var listener = new SecureChannelListener(sslServerListeningPort, cert);
 
-			var listenerTask = listener.AcceptConnection();
-
-			listener.OnConnectionReceived = (client) =>
+			while (true)
 			{
-				client.StartReceiving();
-
-				if (_ConnectionBridge != null)
+				try
 				{
-					client.Dispose(); //shoosh whoever wants to connect unless the previous one disconnects
-					return;
+					Logger.Debug($"Awaiting new connection");
+
+					TcpClient client = listener.AcceptConnection();
+
+					Logger.Info($"New TCP Connection from {client.Client?.RemoteEndPoint}");
+
+					if (_ConnectionBridge != null)
+					{
+						Logger.Debug("Connection bridge already instatiated, going to dispose the coming connection");
+						client.Dispose();
+					}
+
+					SecureChannel secureChannel = new(client, cert, 4096);
+
+					_ConnectionBridge = new ConnectionBridge(secureChannel,
+																string.Empty,
+																udpServerLocalPort,
+																udpServerRemoteAddress,
+																udpServerRemotePort, true);
+
+					secureChannel.OnClientDisconnected = () =>
+					{
+						Logger.Debug($"Connection {secureChannel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
+
+						_ConnectionBridge.Dispose();
+						_ConnectionBridge = null;
+					};
+
 				}
-
-				_ConnectionBridge = new ConnectionBridge(client,
-														string.Empty,
-														udpServerLocalPort,
-														udpServerRemoteAddress,
-														udpServerRemotePort, true);
-
-				client.OnClientDisconnected = () =>
+				catch (Exception ex)
 				{
-					_ConnectionBridge.Dispose();
-					_ConnectionBridge = null;
-				};
-
-				
-			};
-
-
-			return listenerTask;
+					Logger.Error($"an exception occured in listener connection acceptance loop \r\n{ex}");
+				}
+			}
 		}
 
 
@@ -179,7 +200,7 @@ namespace ConnectionBridge
 			string howToRunMessage = string.Join(" ", method.GetParameters()
 																	.Select(x => $"{x.Name} (Type:{x.ParameterType.Name})"));
 
-			return $"ConnectionBridge.exe {serverMode} {howToRunMessage}";
+			return $"ConnectionBridge.exe {serverMode} {howToRunMessage} {{LoggerLevel(Default:info)}}";
 		}
 
 		static string PromptStringParameter(string paramName)
@@ -199,6 +220,20 @@ namespace ConnectionBridge
 					return result;
 
 				Console.WriteLine("Invalid input");
+			}
+		}
+
+		static T PromptEnumValue<T>(string paramName) where T : struct, Enum, IComparable, IConvertible
+		{
+			while (true)
+			{
+				Console.WriteLine($"{paramName} (valid values:{string.Join(", ", Enum.GetValues<T>().Select(x => x.ToString()))}): ");
+
+				string input = Console.ReadLine();
+				if (Enum.TryParse(input, true, out T o))
+					return o;
+
+				Console.WriteLine($"Invalid input");
 			}
 		}
 	}

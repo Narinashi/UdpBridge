@@ -56,7 +56,7 @@ namespace ConnectionBridge
 			{
 				if (message is HelloMessage hello)
 				{
-					Logger.Info($"{(_ServerMode ? "Server: " : "Client: ")}Hello message received from peer with message of {hello.Message}");
+					Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Hello message received from peer with message of {hello.Message}");
 
 					if (_ServerMode)
 						_Serializer.Send(new HelloMessage { Message = hello.Message });
@@ -66,7 +66,7 @@ namespace ConnectionBridge
 				}
 				else if (message is KeyExchangeMessage keyExchange)
 				{
-					Logger.Info($"{(_ServerMode ? "Server: " : "Client: ")}KeyExchange message Received consisting of " +
+					Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}KeyExchange message Received consisting of " +
 								$"{nameof(KeyExchangeMessage.Identifier)}:{keyExchange.Identifier}," +
 								$" {nameof(KeyExchangeMessage.Key)}:{keyExchange.Key}, " +
 								$"{nameof(KeyExchangeMessage.Dummy)}:{keyExchange.Dummy}");
@@ -114,7 +114,7 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				Logger.Info($"Server: Received packet from a remote peer, going to pipe it to {_RemoteUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Server: Received packet from a remote peer, going to pipe it to {_RemoteUdpServer.RemoteEndPoint}");
 
 				var identifier = message.Buffer.Take(16).ToArray();
 				if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
@@ -130,15 +130,26 @@ namespace ConnectionBridge
 				//add deobfuscation and such here (later)
 				_RemoteUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
 
+				if(message.EndPoint.Address != _SecureChannel.PeerEndPoint.Address)
+				{
+					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Receving udp packets with correct session from {message.EndPoint.Address} but the tls session initiated from {_SecureChannel.PeerEndPoint.Address} ... passing through");
+				}
+
+				if(message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
+				{
+					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
+					_LocalUdpServer.ResetPeer();
+				}
+
 #if DEBUG
 				//Send back whatever it receives (debug purposes :^) )
-				Logger.Info("debug mode, sending back clients data");
+				Logger.Debug("debug mode; sending back clients data");
 				_LocalUdpServer.SendBack(message.Buffer, message.Buffer.Length);
 #endif
 			}
 			else
 			{
-				Logger.Info($"Client: Received packet from a local application, going to pipe it to server at {_RemoteUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Client: Received packet from a local application, going to pipe it to server at {_RemoteUdpServer.RemoteEndPoint}");
 
 				//add identifier part here
 				//add obfuscatio and such here
@@ -155,7 +166,7 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				Logger.Info($"Server: Received packet from a local application, going to send it to {_LocalUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Server: Received packet from a local application, going to send it to {_LocalUdpServer.RemoteEndPoint}");
 
 				//add identifier part here
 				//add obfuscatio and such here
@@ -163,7 +174,7 @@ namespace ConnectionBridge
 			}
 			else
 			{
-				Logger.Info($"Client: Received packet from the server, going to send it an local application at {_LocalUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Client: Received packet from the server, going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
 
 				var identifier = message.Buffer.Take(16).ToArray();
 
@@ -174,6 +185,12 @@ namespace ConnectionBridge
 						$"got:{(identifier.Length == 16 ? new Guid(identifier) : Encoding.ASCII.GetString(identifier))}");
 
 					return;
+				}
+
+				if (message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
+				{
+					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
+					_LocalUdpServer.ResetPeer();
 				}
 
 				//skip the identifier part

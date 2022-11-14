@@ -16,6 +16,7 @@ namespace ConnectionBridge
 
 		readonly UdpClient _Client;
 		readonly AsyncCallback _EndReceiveCallback;
+		readonly AsyncCallback _EndSendCallback;
 
 		readonly UdpMessageReceivedArgs _MessageReceivedArgs;
 
@@ -31,6 +32,7 @@ namespace ConnectionBridge
 			};
 
 			_EndReceiveCallback = new AsyncCallback(EndReceieve);
+			_EndSendCallback = new AsyncCallback(EndSend);
 			_Listeners = new Dictionary<IPAddress, OnUdpMessageReceived>();
 			_MessageReceivedArgs = new UdpMessageReceivedArgs();
 		}
@@ -55,30 +57,27 @@ namespace ConnectionBridge
 			else
 				_Listeners.Add(address, @delegate);
 		}
-		
+
 		public void RemoveListener(IPAddress address)
 		{
 			_Listeners.Remove(address);
 		}
-		
+
 		public void StartReceiving()
-		{		
-			_Client.BeginReceive(_EndReceiveCallback, null);			
+		{
+			_Client.BeginReceive(_EndReceiveCallback, null);
 		}
 
 		public void SendBack(byte[] buffer, int length)
 		{
 			if (RemoteEndPoint == null)
 				throw new InvalidOperationException("No target endpoint has been set (Or use a overload that accepts a IPEndPoint)");
+
 			try
 			{
-				var sentBytes = _Client.Send(buffer, length);
-
-
-				if (sentBytes != length)
-					Logger.Warning($"UdpClient didnt sent whole buffer, expected:{length}, sent:{sentBytes}");
+				_Client.BeginSend(buffer, length, _EndSendCallback, length);
 			}
-			catch(Exception ex)
+			catch (Exception ex)
 			{
 				Logger.Error($"An exception occured in SendBack UdpBridge, \r\n{ex}");
 			}
@@ -88,16 +87,36 @@ namespace ConnectionBridge
 		{
 			try
 			{
-				var sentBytes = _Client.Send(buffer, length, target);
-
-				if (sentBytes != length)
-					Logger.Warning($"UdpClient didnt sent whole buffer, expected:{length}, sent:{sentBytes}");
+				_Client.BeginSend(buffer, length, target, _EndSendCallback, length);
 			}
-			catch(Exception ex)
+			catch (Exception ex)
 			{
-				Logger.Error($"An exception occured in SendBack UdpBridge, \r\n{ex}");
+				Logger.Error($"An exception occured in Send UdpBridge, \r\n{ex}");
 			}
 		}
+
+		private void EndSend(IAsyncResult asyncResult)
+		{
+			try
+			{
+				var bytesSent = _Client.EndSend(asyncResult);
+				var expectedBytesSent = (int)asyncResult.AsyncState;
+
+				if (bytesSent != expectedBytesSent)
+					Logger.Warning($"Udp send message didnt send whole buffer expected:{expectedBytesSent}, sent:{bytesSent}");
+			}
+			catch (Exception ex)
+			{
+				var message = $"An exception occured in Send UdpBridge, \r\n{ex}";
+
+				if (ex is ObjectDisposedException || ex is SocketException || ex is InvalidOperationException)
+					Logger.Debug(message);
+				else
+					Logger.Error(message);
+			}
+		}
+
+
 
 		public void ResetPeer()
 		{
@@ -125,15 +144,20 @@ namespace ConnectionBridge
 					del2(_MessageReceivedArgs);
 				else
 					Logger.Warning($"Packet received from {_MessageReceivedArgs.EndPoint} which doesnt have any listener registered for");
-				
+
 				_Client.BeginReceive(_EndReceiveCallback, null);
-			}		
+			}
 			catch (Exception ex)
 			{
-				Logger.Error($"An exception occured in EndReceive UdpBridge, \r\n{ex}");
+				var message = $"An exception occured in EndReceive UdpBridge, \r\n{ex}";
 
-				if(ex is not ObjectDisposedException && ex is not IOException)
-				_Client.BeginReceive(_EndReceiveCallback, null);
+				if (ex is ObjectDisposedException || ex is SocketException || ex is InvalidOperationException)
+					Logger.Debug(message);
+				else
+				{ 
+					Logger.Error(message);
+					_Client.BeginReceive(_EndReceiveCallback, null);
+				}
 			}
 		}
 

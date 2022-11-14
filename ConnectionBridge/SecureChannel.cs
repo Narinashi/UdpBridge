@@ -21,7 +21,7 @@ namespace ConnectionBridge
 		public OnDataReceived OnDataReceived;
 		public OnClientDisconnected OnClientDisconnected;
 
-		public IPEndPoint PeerEndPoint => _Client.Client.RemoteEndPoint as IPEndPoint;
+		public IPEndPoint PeerEndPoint { get; private set; }
 
 		readonly SslStream _SecureStream;
 		readonly TcpClient _Client;
@@ -64,6 +64,7 @@ namespace ConnectionBridge
 				throw new ArgumentException("Buffer size cannot be less than 1");
 
 			_Client = tcpClient ?? throw new ArgumentNullException(nameof(tcpClient));
+			PeerEndPoint = _Client.Client.RemoteEndPoint as IPEndPoint;
 			_CancelationToken = new CancellationTokenSource();
 			_Buffer = new byte[bufferSize];
 			_DataReceivedArgs = new DataReceivedArgs(_Buffer);
@@ -115,7 +116,7 @@ namespace ConnectionBridge
 			{
 				await _SecureStream.WriteAsync(buffer, 0, buffer.Length, _CancelationToken.Token);
 			}
-			catch(InvalidOperationException)
+			catch(ObjectDisposedException)
 			{
 				OnClientDisconnected?.Invoke();
 				throw;

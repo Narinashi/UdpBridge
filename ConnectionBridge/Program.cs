@@ -211,9 +211,9 @@ namespace ConnectionBridge
 						var channel = secureChannel;
 
 						Logger.Debug($"Awaiting authentication for {channel.PeerEndPoint}");
-						if ((await Task.WhenAny(Task.Delay(AuthenticationTimeout), authenticationTask)) != authenticationTask || !bridge.IsAuthenticated)
+						if ((await Task.WhenAny(Task.Delay(AuthenticationTimeout), authenticationTask)) != authenticationTask)
 						{
-							Logger.Debug($"authentication failed for {channel.PeerEndPoint}");
+							Logger.Debug($"SSL authentication failed for {channel.PeerEndPoint}");
 
 							bridge.Dispose();
 
@@ -223,6 +223,18 @@ namespace ConnectionBridge
 						Logger.Debug($"authentication succeded for {channel.PeerEndPoint}");
 
 						channel.StartReceiving();
+
+						await Task.Delay(AuthenticationTimeout);
+
+						if(!bridge.IsAuthenticated)
+						{
+							Logger.Debug($"authentication failed for {channel.PeerEndPoint}");
+
+							bridge.Dispose();
+
+							return;
+						}
+
 						_ConnectionBridge = bridge;
 					});
 				}

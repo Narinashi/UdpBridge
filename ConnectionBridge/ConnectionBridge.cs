@@ -10,6 +10,8 @@ namespace ConnectionBridge
 {
 	class ConnectionBridge : IDisposable
 	{
+		public bool IsAuthenticated { get; private set; }
+
 		UdpServer _LocalUdpServer;
 		UdpServer _RemoteUdpServer;
 		readonly SecureChannel _SecureChannel;
@@ -55,9 +57,6 @@ namespace ConnectionBridge
 			_RemoteUdpServerAddress = remoteAddress;
 			_RemoteUdpServerPort = remotePort;
 
-			InitLocalUdpServer();
-			InitRemoteUdpServer();
-
 			_Deserializer.OnMessageReceived = (message) =>
 			{
 				if (message is HelloMessage hello)
@@ -66,6 +65,14 @@ namespace ConnectionBridge
 
 					if (_ServerMode)
 						_Serializer.Send(new HelloMessage { Message = hello.Message });
+					
+					if (Disposed)
+						return;
+
+					IsAuthenticated = true;
+
+					InitLocalUdpServer();
+					InitRemoteUdpServer();
 
 					_LocalUdpServer.StartReceiving();
 					_RemoteUdpServer.StartReceiving();

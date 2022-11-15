@@ -19,6 +19,9 @@ namespace ConnectionBridge
 	{
 		static ConnectionBridge _ConnectionBridge;
 		static bool _ServerMode;
+
+		const int AuthenticationTimeout = 10000;
+
 		static async Task Main(string[] args)
 		{
 			if (args?.Length > 1)
@@ -137,14 +140,14 @@ namespace ConnectionBridge
 
 				Logger.Info($"ConnectionBridge Handshake complete");
 			}
-			catch(Exception ex)
+			catch (Exception ex)
 			{
 				Logger.Error($"An exception occurred while trying to connect to server, \r\n{ex}");
-				await StartClientMode(sslServerAddress, 
+				await StartClientMode(sslServerAddress,
 										sslServerPort,
-										trustedHostName, 
+										trustedHostName,
 										udpServerLocalPort,
-										udpServerRemoteAddress, 
+										udpServerRemoteAddress,
 										udpServerRemotePort);
 			}
 		}
@@ -172,7 +175,7 @@ namespace ConnectionBridge
 
 					TcpClient client = listener.AcceptConnection();
 
-					client.ReceiveTimeout = client.SendTimeout = 400000;
+					client.ReceiveTimeout = client.SendTimeout = 20000;
 
 					Logger.Info($"New TCP Connection from {client.Client?.RemoteEndPoint}");
 
@@ -185,23 +188,43 @@ namespace ConnectionBridge
 					}
 
 					SecureChannel secureChannel = new(client, cert, 4096);
-					await secureChannel.Authenticate();
-					secureChannel.StartReceiving();
+					Task authenticationTask = secureChannel.Authenticate();
 
-					_ConnectionBridge = new ConnectionBridge(secureChannel,
+					ConnectionBridge connectionBridge = new(secureChannel,
 																string.Empty,
 																udpServerLocalPort,
 																udpServerRemoteAddress,
 																udpServerRemotePort, true);
-
 					secureChannel.OnClientDisconnected = () =>
 					{
-						Logger.Debug($"Connection {secureChannel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
+						var bridge = connectionBridge;
+						var channel = secureChannel;
 
-						_ConnectionBridge.Dispose();
-						_ConnectionBridge = null;
+						Logger.Debug($"Connection {channel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
+
+						bridge.Dispose();
 					};
 
+					_ = Task.Run(async () =>
+					{
+						var bridge = connectionBridge;
+						var channel = secureChannel;
+
+						Logger.Debug($"Awaiting authentication for {channel.PeerEndPoint}");
+						if ((await Task.WhenAny(Task.Delay(AuthenticationTimeout), authenticationTask)) != authenticationTask || !bridge.IsAuthenticated)
+						{
+							Logger.Debug($"authentication failed for {channel.PeerEndPoint}");
+
+							bridge.Dispose();
+
+							return;
+						}
+
+						Logger.Debug($"authentication succeded for {channel.PeerEndPoint}");
+
+						channel.StartReceiving();
+						_ConnectionBridge = bridge;
+					});
 				}
 				catch (Exception ex)
 				{

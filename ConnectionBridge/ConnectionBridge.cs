@@ -35,7 +35,7 @@ namespace ConnectionBridge
 		byte[] _SessionIdentifierByteArray;
 		byte[] _SessionDummyByteArray;
 
-		bool Disposed;
+		public bool Disposed { get; private set; }
 
 		const int _MessageBufferSize = 4096;
 
@@ -127,7 +127,10 @@ namespace ConnectionBridge
 			Logger.Debug("Initiating local udp server ...");
 
 			if (_LocalUdpServer != null)
+			{
 				_LocalUdpServer.OnDisconnected = null;
+				_LocalUdpServer.Dispose();
+			}
 
 			_LocalUdpServer = string.IsNullOrWhiteSpace(_LocalUdpServerAddress) ?
 								new UdpServer(_LocalUdpServerPort) :

@@ -200,7 +200,7 @@ namespace ConnectionBridge
 						var bridge = connectionBridge;
 						var channel = secureChannel;
 
-						Logger.Debug($"Connection {channel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
+						Logger.Debug($"Connection {channel.PeerEndPoint} has been disconnected");
 
 						bridge.Dispose();
 					};
@@ -236,6 +236,13 @@ namespace ConnectionBridge
 						}
 
 						_ConnectionBridge = bridge;
+						channel.OnClientDisconnected = () =>
+						{
+							Logger.Debug($"Connection {channel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
+
+							_ConnectionBridge.Dispose();
+							_ConnectionBridge = null;
+						};
 					});
 				}
 				catch (Exception ex)

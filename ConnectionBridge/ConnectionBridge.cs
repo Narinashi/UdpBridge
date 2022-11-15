@@ -10,8 +10,8 @@ namespace ConnectionBridge
 {
 	class ConnectionBridge : IDisposable
 	{
-		readonly UdpServer _LocalUdpServer;
-		readonly UdpServer _RemoteUdpServer;
+		UdpServer _LocalUdpServer;
+		UdpServer _RemoteUdpServer;
 		readonly SecureChannel _SecureChannel;
 
 		readonly MessageDeserializer _Deserializer;
@@ -23,9 +23,17 @@ namespace ConnectionBridge
 		Guid _SessionIdentifier;
 		Guid _SessionDummy;
 
+		readonly string _LocalUdpServerAddress;
+		readonly string _RemoteUdpServerAddress;
+
+		readonly int _LocalUdpServerPort;
+		readonly int _RemoteUdpServerPort;
+
 		byte[] _SessionKeyByteArray;
 		byte[] _SessionIdentifierByteArray;
 		byte[] _SessionDummyByteArray;
+
+		bool Disposed;
 
 		const int _MessageBufferSize = 4096;
 
@@ -41,16 +49,14 @@ namespace ConnectionBridge
 			_Deserializer = new MessageDeserializer(_SecureChannel, _MessageBufferSize);
 			_Serializer = new MessageSerializer(_SecureChannel);
 
-			_LocalUdpServer = string.IsNullOrWhiteSpace(localAddress) ?
-								new UdpServer(localPort) :
-								new UdpServer(localAddress, localPort);
+			_LocalUdpServerAddress = localAddress;
+			_LocalUdpServerPort = localPort;
 
-			_RemoteUdpServer = string.IsNullOrWhiteSpace(remoteAddress) ?
-								new UdpServer(remotePort) :
-								new UdpServer(remoteAddress, remotePort);
+			_RemoteUdpServerAddress = remoteAddress;
+			_RemoteUdpServerPort = remotePort;
 
-			_LocalUdpServer.AddListener(_ServerMode ? _SecureChannel.PeerEndPoint.Address.MapToIPv4() : IPAddress.Any, OnLocalUdpServerMessageReceived);
-			_RemoteUdpServer.AddListener(_ServerMode ? IPAddress.Any : _SecureChannel.PeerEndPoint.Address.MapToIPv4(), OnRemoteUdpServerMessageReceived);
+			InitLocalUdpServer();
+			InitRemoteUdpServer();
 
 			_Deserializer.OnMessageReceived = (message) =>
 			{
@@ -82,6 +88,7 @@ namespace ConnectionBridge
 			};
 
 		}
+
 		public async Task Handshake()
 		{
 			if (_ServerMode)
@@ -104,6 +111,48 @@ namespace ConnectionBridge
 				Key = _SessionKey,
 			});
 		}
+
+		private void InitLocalUdpServer()
+		{
+			if (Disposed)
+				return;
+
+			Logger.Debug("Initiating local udp server ...");
+
+			if (_LocalUdpServer != null)
+				_LocalUdpServer.OnDisconnected = null;
+
+			_LocalUdpServer = string.IsNullOrWhiteSpace(_LocalUdpServerAddress) ?
+								new UdpServer(_LocalUdpServerPort) :
+								new UdpServer(_LocalUdpServerAddress, _LocalUdpServerPort);
+
+			_LocalUdpServer.AddListener(_ServerMode ? _SecureChannel.PeerEndPoint.Address.MapToIPv4() : IPAddress.Any, OnLocalUdpServerMessageReceived);
+			
+			_LocalUdpServer.OnDisconnected= InitLocalUdpServer;
+		}
+
+		private void InitRemoteUdpServer()
+		{
+			if (Disposed)
+				return;
+
+			Logger.Debug("Initiating Remote udp server ...");
+
+			if (_RemoteUdpServer != null)
+			{
+				_RemoteUdpServer.OnDisconnected = null;
+				_RemoteUdpServer.Dispose();
+			}
+
+			_RemoteUdpServer = string.IsNullOrWhiteSpace(_RemoteUdpServerAddress) ?
+								new UdpServer(_RemoteUdpServerPort) :
+								new UdpServer(_RemoteUdpServerAddress, _RemoteUdpServerPort);
+
+			_RemoteUdpServer.AddListener(_ServerMode ? IPAddress.Any : _SecureChannel.PeerEndPoint.Address.MapToIPv4(), OnRemoteUdpServerMessageReceived);
+			_RemoteUdpServer.OnDisconnected = InitRemoteUdpServer;
+		}
+
+
 		private void OnLocalUdpServerMessageReceived(UdpMessageReceivedArgs message)
 		{
 			if (_SessionIdentifierByteArray == null)
@@ -114,7 +163,7 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				Logger.Debug($"Server: Received packet from a remote peer, going to pipe it to {_RemoteUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Server: Received packet from a remote peer({message.EndPoint}), going to pipe it to {_RemoteUdpServer.RemoteEndPoint}");
 
 				var identifier = message.Buffer.Take(16).ToArray();
 				if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
@@ -136,22 +185,17 @@ namespace ConnectionBridge
 				//skip the identifier part
 				//add deobfuscation and such here (later)
 				_RemoteUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
-
-#if DEBUG
-				//Send back whatever it receives (debug purposes :^) )
-				Logger.Debug("debug mode; sending back clients data");
-				_LocalUdpServer.SendBack(message.Buffer, message.Buffer.Length);
-#endif
 			}
 			else
 			{
-				Logger.Debug($"Client: Received packet from a local application, going to pipe it to server at {_RemoteUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Client: Received packet from a local application({message.EndPoint}), going to pipe it to server at {_RemoteUdpServer.RemoteEndPoint}");
 
 				//add identifier part here
 				//add obfuscatio and such here
 				_RemoteUdpServer.SendBack(_SessionIdentifierByteArray.Concat(message.Buffer).ToArray(), message.Buffer.Length + 16);
 			}
 		}
+		
 		private void OnRemoteUdpServerMessageReceived(UdpMessageReceivedArgs message)
 		{
 			if (_SessionIdentifierByteArray == null)
@@ -162,7 +206,7 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				Logger.Debug($"Server: Received packet from a local application, going to send it to {_LocalUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Server: Received packet from a local application({message.EndPoint}), going to send it to {_LocalUdpServer.RemoteEndPoint}");
 
 				//add identifier part here
 				//add obfuscatio and such here
@@ -170,7 +214,7 @@ namespace ConnectionBridge
 			}
 			else
 			{
-				Logger.Debug($"Client: Received packet from the server, going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
+				Logger.Debug($"Client: Received packet from the server({message.EndPoint}), going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
 
 				var identifier = message.Buffer.Take(16).ToArray();
 
@@ -198,9 +242,14 @@ namespace ConnectionBridge
 
 		public void Dispose()
 		{
+			if (Disposed)
+				return;
+
 			_LocalUdpServer.Dispose();
 			_RemoteUdpServer.Dispose();
 			_SecureChannel.Dispose();
+
+			Disposed = true;
 		}
 	}
 }

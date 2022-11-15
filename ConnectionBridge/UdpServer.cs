@@ -10,9 +10,13 @@ using System.Threading.Tasks;
 namespace ConnectionBridge
 {
 	delegate void OnUdpMessageReceived(UdpMessageReceivedArgs args);
+	delegate void OnUdpDisconnected();
+
 	class UdpServer : IDisposable
 	{
 		public IPEndPoint RemoteEndPoint { get; private set; }
+
+		public OnUdpDisconnected OnDisconnected;
 
 		readonly UdpClient _Client;
 		readonly AsyncCallback _EndReceiveCallback;
@@ -23,6 +27,8 @@ namespace ConnectionBridge
 		readonly Dictionary<IPAddress, OnUdpMessageReceived> _Listeners;
 
 		readonly int _BindingPort;
+
+		bool Disposed;
 
 		public UdpServer(int incomingPort)
 		{
@@ -107,16 +113,23 @@ namespace ConnectionBridge
 			}
 			catch (Exception ex)
 			{
+				if (Disposed)
+				{
+					Logger.Debug($"Udp server is alredy disposed, ignoring exception: \r\n{ex}");
+					return;
+				}
+
 				var message = $"An exception occured in Send UdpBridge, \r\n{ex}";
 
-				if (ex is ObjectDisposedException || ex is SocketException || ex is InvalidOperationException)
-					Logger.Debug(message);
+				if (ex is ObjectDisposedException || ex is SocketException)
+					Logger.Warning(message);
 				else
 					Logger.Error(message);
+
+				if (!(_Client.Client?.Connected ?? false))
+					OnDisconnected?.Invoke();
 			}
 		}
-
-
 
 		public void ResetPeer()
 		{
@@ -149,20 +162,33 @@ namespace ConnectionBridge
 			}
 			catch (Exception ex)
 			{
+				if (Disposed)
+				{
+					Logger.Debug($"Udp server is alredy disposed, ignoring exception: \r\n{ex}");
+					return;
+				}
+
 				var message = $"An exception occured in EndReceive UdpBridge, \r\n{ex}";
 
 				if (ex is ObjectDisposedException || ex is SocketException || ex is InvalidOperationException)
-					Logger.Debug(message);
+					Logger.Warning(message);
 				else
-				{ 
 					Logger.Error(message);
+
+				if (!(_Client.Client?.Connected ?? false))
+					OnDisconnected?.Invoke();
+				else
 					_Client.BeginReceive(_EndReceiveCallback, null);
-				}
 			}
 		}
 
 		public void Dispose()
 		{
+			if (Disposed)
+				return;
+
+			Disposed = true;
+
 			_Client.Dispose();
 			_Listeners.Clear();
 		}

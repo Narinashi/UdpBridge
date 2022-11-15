@@ -162,7 +162,7 @@ namespace ConnectionBridge
 			Logger.Info($"Initiating in ServerMode ...");
 
 			var cert = new X509Certificate2(sslCertificateFileAddress, sslCertificatePassword);
-			var listener = new SecureChannelListener(sslServerListeningPort, cert);
+			var listener = new SecureChannelListener(sslServerListeningPort);
 
 			while (true)
 			{

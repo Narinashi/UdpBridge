@@ -35,9 +35,14 @@ namespace ConnectionBridge
 		byte[] _SessionIdentifierByteArray;
 		byte[] _SessionDummyByteArray;
 
+		byte[] _ActualBuffer;
+
+		int _SendCounts;
+
 		public bool Disposed { get; private set; }
 
 		const int _MessageBufferSize = 4096;
+		const int MTUSize = 1420;
 
 		public ConnectionBridge(SecureChannel channel, string localAddress, int localPort, string remoteAddress, int remotePort, bool serverMode = false)
 		{
@@ -47,6 +52,8 @@ namespace ConnectionBridge
 
 			if (_SecureChannel.PeerEndPoint is null)
 				throw new ArgumentException("TCP Connection hasnt been initiated yet");
+			
+			InitializeUdpBuffer();
 
 			_Deserializer = new MessageDeserializer(_SecureChannel, _MessageBufferSize);
 			_Serializer = new MessageSerializer(_SecureChannel);
@@ -56,6 +63,8 @@ namespace ConnectionBridge
 
 			_RemoteUdpServerAddress = remoteAddress;
 			_RemoteUdpServerPort = remotePort;
+
+			_SendCounts = (int)(DateTime.Now.Ticks % _ActualBuffer.Length);
 
 			_Deserializer.OnMessageReceived = (message) =>
 			{
@@ -84,6 +93,7 @@ namespace ConnectionBridge
 								$" {nameof(KeyExchangeMessage.Key)}:{keyExchange.Key}, " +
 								$"{nameof(KeyExchangeMessage.Dummy)}:{keyExchange.Dummy}");
 
+
 					_SessionDummy = keyExchange.Dummy;
 					_SessionIdentifier = keyExchange.Identifier;
 					_SessionKey = keyExchange.Key;
@@ -91,6 +101,8 @@ namespace ConnectionBridge
 					_SessionDummyByteArray = _SessionDummy.ToByteArray();
 					_SessionIdentifierByteArray = _SessionIdentifier.ToByteArray();
 					_SessionKeyByteArray = _SessionKey.ToByteArray();
+
+					Buffer.BlockCopy(_SessionIdentifierByteArray, 0, _ActualBuffer, 0, _SessionIdentifierByteArray.Length);
 				}
 			};
 
@@ -111,12 +123,22 @@ namespace ConnectionBridge
 			_SessionIdentifierByteArray = _SessionIdentifier.ToByteArray();
 			_SessionKeyByteArray = _SessionKey.ToByteArray();
 
+			Buffer.BlockCopy(_SessionIdentifierByteArray, 0, _ActualBuffer, 0, _SessionIdentifierByteArray.Length);
+
 			await _Serializer.Send(new KeyExchangeMessage
 			{
 				Dummy = _SessionDummy,
 				Identifier = _SessionIdentifier,
 				Key = _SessionKey,
 			});
+		}
+
+		private void InitializeUdpBuffer()
+		{
+			_ActualBuffer = Enumerable
+								.Range(0, MTUSize)
+								.Select(x => (byte)(x % 128))
+								.ToArray();
 		}
 
 		private void InitLocalUdpServer()
@@ -162,7 +184,6 @@ namespace ConnectionBridge
 			_RemoteUdpServer.OnDisconnected = InitRemoteUdpServer;
 		}
 
-
 		private void OnLocalUdpServerMessageReceived(UdpMessageReceivedArgs message)
 		{
 			if (_SessionIdentifierByteArray == null)
@@ -174,6 +195,14 @@ namespace ConnectionBridge
 			if (_ServerMode)
 			{
 				Logger.Debug($"Server: Received packet from a remote peer({message.EndPoint}), going to pipe it to {_RemoteUdpServer.RemoteEndPoint}");
+
+				if(message.Buffer.Length < 18)
+				{
+					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
+						$"client:{message.EndPoint} with size of {message.Buffer.Length}");
+
+					return;
+				}
 
 				var identifier = message.Buffer.Take(16).ToArray();
 				if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
@@ -192,20 +221,45 @@ namespace ConnectionBridge
 					_LocalUdpServer.ResetPeer();
 				}
 
+				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 16);
+
+				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")} Packet size:{message.Buffer.Length}({message.Buffer.Length - 18}), actual packetSize:{actualPacketLength}");
+
 				//skip the identifier part
 				//add deobfuscation and such here (later)
-				_RemoteUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
+				_RemoteUdpServer.SendBack(message.Buffer.Skip(18).ToArray(), actualPacketLength);			
 			}
 			else
 			{
 				Logger.Debug($"Client: Received packet from a local application({message.EndPoint}), going to pipe it to server at {_RemoteUdpServer.RemoteEndPoint}");
+				
+				if(_ActualBuffer == null)
+				{
+					Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
+					return;
+				}
+
+				if(message.Buffer.Length + 18 > _ActualBuffer.Length)
+				{
+					Logger.Warning($"Application sent a message with a size that is bigger than send buffer, size:{message.Buffer.Length}");
+					return;
+				}
+
+				Buffer.BlockCopy(message.Buffer, 0, _ActualBuffer, 18, message.Buffer.Length);
+
+				var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
+
+				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
 
 				//add identifier part here
 				//add obfuscatio and such here
-				_RemoteUdpServer.SendBack(_SessionIdentifierByteArray.Concat(message.Buffer).ToArray(), message.Buffer.Length + 16);
+				_RemoteUdpServer.SendBack(_ActualBuffer, 
+					message.Buffer.Length + (_SendCounts % (_ActualBuffer.Length - message.Buffer.Length)));
+
+				_SendCounts++;
 			}
 		}
-		
+
 		private void OnRemoteUdpServerMessageReceived(UdpMessageReceivedArgs message)
 		{
 			if (_SessionIdentifierByteArray == null)
@@ -217,13 +271,40 @@ namespace ConnectionBridge
 			if (_ServerMode)
 			{
 				Logger.Debug($"Server: Received packet from a local application({message.EndPoint}), going to send it to {_LocalUdpServer.RemoteEndPoint}");
+				
+				if (_ActualBuffer == null)
+				{
+					Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
+					return;
+				}
 
-				//add identifier part here
-				//add obfuscatio and such here
-				_LocalUdpServer.SendBack(_SessionIdentifierByteArray.Concat(message.Buffer).ToArray(), message.Buffer.Length + 16);
+				if (message.Buffer.Length + 18 > _ActualBuffer.Length)
+				{
+					Logger.Warning($"Application sent a message with a size that is bigger than send buffer, size:{message.Buffer.Length}");
+					return;
+				}
+
+				Buffer.BlockCopy(message.Buffer, 0, _ActualBuffer, 18, message.Buffer.Length);
+
+				var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
+
+				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
+
+				_LocalUdpServer.SendBack(_ActualBuffer,
+					message.Buffer.Length + (_SendCounts % (_ActualBuffer.Length - message.Buffer.Length)));
+
+				_SendCounts++;
 			}
 			else
 			{
+				if (message.Buffer.Length < 18)
+				{
+					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
+						$"client:{message.EndPoint} with size of {message.Buffer.Length}");
+
+					return;
+				}
+
 				Logger.Debug($"Client: Received packet from the server({message.EndPoint}), going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
 
 				var identifier = message.Buffer.Take(16).ToArray();
@@ -244,9 +325,13 @@ namespace ConnectionBridge
 					_RemoteUdpServer.ResetPeer();
 				}
 
+				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 16);
+				
+				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")} Packet size:{message.Buffer.Length}({message.Buffer.Length-18}), actual packetSize:{actualPacketLength}");
+
 				//skip the identifier part
 				//add deobfuscation and such here (later)
-				_LocalUdpServer.SendBack(message.Buffer.Skip(16).ToArray(), message.Buffer.Length - 16);
+				_LocalUdpServer.SendBack(message.Buffer.Skip(18).ToArray(), actualPacketLength);
 			}
 		}
 

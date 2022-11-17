@@ -260,7 +260,7 @@ namespace ConnectionBridge
 
 				Logger.Debug($"Sending obfuscated packet");
 
-				ApplyXoR(message.Buffer, message.Buffer.Length);
+				//message.Buffer = ApplyXoR(message.Buffer, message.Buffer.Length);
 
 				Buffer.BlockCopy(lengthByteArray, 0, _ObfuscatedBuffer, 17, lengthByteArray.Length);
 
@@ -300,7 +300,7 @@ namespace ConnectionBridge
 				return;
 			}
 
-			Logger.Debug($"Client: Received packet from the server({message.EndPoint}), going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
+			Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Received packet from remote({message.EndPoint}), going to send it a local application at {toUdpServer.RemoteEndPoint}");
 			
 			if (message.Buffer[0] == ObfuscatedPacketSign)
 			{
@@ -337,7 +337,8 @@ namespace ConnectionBridge
 				}
 
 
-				toUdpServer.SendBack(ApplyXoR(message.Buffer.Skip(19).ToArray(), actualPacketLength), actualPacketLength);
+				//toUdpServer.SendBack(ApplyXoR(message.Buffer.Skip(19).ToArray(), actualPacketLength), actualPacketLength);
+				toUdpServer.SendBack(message.Buffer.Skip(19).ToArray(), actualPacketLength);
 			}
 			else
 			{
@@ -345,7 +346,7 @@ namespace ConnectionBridge
 
 				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 1);
 
-				if (actualPacketLength > message.Buffer.Length - 1)
+				if (actualPacketLength > message.Buffer.Length - 3)
 				{
 					Logger.Warning($"Mismatch between actual packet size and length parameter," +
 						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");

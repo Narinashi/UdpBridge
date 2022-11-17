@@ -223,8 +223,15 @@ namespace ConnectionBridge
 
 				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 16);
 
-				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")} Packet size:{message.Buffer.Length}({message.Buffer.Length - 18}), actual packetSize:{actualPacketLength}");
+				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length - 18}), actual packetSize:{actualPacketLength}");
+				
+				if (actualPacketLength > message.Buffer.Length - 18)
+				{
+					Logger.Warning($"Mismatch between actual packet size and length parameter," +
+						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
 
+					return;
+				}
 				//skip the identifier part
 				//add deobfuscation and such here (later)
 				_RemoteUdpServer.SendBack(message.Buffer.Skip(18).ToArray(), actualPacketLength);			
@@ -245,16 +252,19 @@ namespace ConnectionBridge
 					return;
 				}
 
+
 				Buffer.BlockCopy(message.Buffer, 0, _ActualBuffer, 18, message.Buffer.Length);
 
 				var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
 
 				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
 
+				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length;
+
 				//add identifier part here
 				//add obfuscatio and such here
 				_RemoteUdpServer.SendBack(_ActualBuffer, 
-					message.Buffer.Length + (_SendCounts % (_ActualBuffer.Length - message.Buffer.Length)));
+					message.Buffer.Length + Math.Max(5, remainingBytesCount));
 
 				_SendCounts++;
 			}
@@ -290,8 +300,12 @@ namespace ConnectionBridge
 
 				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
 
+				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length;
+
+				//add identifier part here
+				//add obfuscatio and such here
 				_LocalUdpServer.SendBack(_ActualBuffer,
-					message.Buffer.Length + (_SendCounts % (_ActualBuffer.Length - message.Buffer.Length)));
+					message.Buffer.Length + Math.Max(5, remainingBytesCount));
 
 				_SendCounts++;
 			}
@@ -327,7 +341,15 @@ namespace ConnectionBridge
 
 				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 16);
 				
-				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")} Packet size:{message.Buffer.Length}({message.Buffer.Length-18}), actual packetSize:{actualPacketLength}");
+				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length-18}), actual packetSize:{actualPacketLength}");
+
+				if(actualPacketLength > message.Buffer.Length - 18)
+				{
+					Logger.Warning($"Mismatch between actual packet size and length parameter," +
+						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
+
+					return;
+				}
 
 				//skip the identifier part
 				//add deobfuscation and such here (later)

@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
+
+using System.Runtime.InteropServices;
 
 namespace ConnectionBridge
 {
@@ -30,12 +31,17 @@ namespace ConnectionBridge
 
 		bool Disposed;
 
+		const int SIO_UDP_CONNRESET = -1744830452;
+
 		public UdpServer(int incomingPort)
 		{
 			_Client = new UdpClient(_BindingPort = incomingPort)
 			{
 				DontFragment = true,
 			};
+
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+				_Client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);		
 
 			_EndReceiveCallback = new AsyncCallback(EndReceieve);
 			_EndSendCallback = new AsyncCallback(EndSend);
@@ -151,6 +157,9 @@ namespace ConnectionBridge
 					_Client.Connect(RemoteEndPoint);
 				}
 
+				if (_Client.Available > _Client.Client.ReceiveBufferSize / 2)
+					Logger.Warning($"Too many packets are being received, can't keep up, Available packets(size) to process:{_Client.Available}, BufferSize:{_Client.Client.ReceiveBufferSize}");
+
 				if (_Listeners.TryGetValue(_MessageReceivedArgs.EndPoint.Address, out OnUdpMessageReceived del))
 					del(_MessageReceivedArgs);
 				else if (_Listeners.TryGetValue(IPAddress.Any, out OnUdpMessageReceived del2))
@@ -175,7 +184,8 @@ namespace ConnectionBridge
 				else
 					Logger.Error(message);
 
-				if (!(_Client.Client?.Connected ?? false))
+				if ((_Client.Client?.SafeHandle?.IsInvalid ?? true) ||
+					(_Client.Client?.SafeHandle?.IsClosed ?? true))
 					OnDisconnected?.Invoke();
 				else
 					_Client.BeginReceive(_EndReceiveCallback, null);

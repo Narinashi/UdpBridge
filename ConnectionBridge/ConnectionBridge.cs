@@ -35,7 +35,11 @@ namespace ConnectionBridge
 		byte[] _SessionIdentifierByteArray;
 		byte[] _SessionDummyByteArray;
 
-		byte[] _ActualBuffer;
+		long _SessionKeyFirstHalf;
+		long _SessionKeySecondHalf;
+
+		byte[] _ObfuscatedBuffer;
+		byte[] _PlainBuffer;
 
 		int _SendCounts;
 
@@ -43,6 +47,10 @@ namespace ConnectionBridge
 
 		const int _MessageBufferSize = 4096;
 		const int MTUSize = 1420;
+
+		static int[] HandshakePacketSizes = new int[] { 148, 84, 92 };
+
+		const int ObfuscatedPacketSign = 139;
 
 		public ConnectionBridge(SecureChannel channel, string localAddress, int localPort, string remoteAddress, int remotePort, bool serverMode = false)
 		{
@@ -64,7 +72,7 @@ namespace ConnectionBridge
 			_RemoteUdpServerAddress = remoteAddress;
 			_RemoteUdpServerPort = remotePort;
 
-			_SendCounts = (int)(DateTime.Now.Ticks % _ActualBuffer.Length);
+			_SendCounts = (int)(DateTime.Now.Ticks % _ObfuscatedBuffer.Length);
 
 			_Deserializer.OnMessageReceived = (message) =>
 			{
@@ -102,7 +110,7 @@ namespace ConnectionBridge
 					_SessionIdentifierByteArray = _SessionIdentifier.ToByteArray();
 					_SessionKeyByteArray = _SessionKey.ToByteArray();
 
-					Buffer.BlockCopy(_SessionIdentifierByteArray, 0, _ActualBuffer, 0, _SessionIdentifierByteArray.Length);
+					Buffer.BlockCopy(_SessionIdentifierByteArray, 0, _ObfuscatedBuffer, 1, _SessionIdentifierByteArray.Length);
 				}
 			};
 
@@ -123,7 +131,10 @@ namespace ConnectionBridge
 			_SessionIdentifierByteArray = _SessionIdentifier.ToByteArray();
 			_SessionKeyByteArray = _SessionKey.ToByteArray();
 
-			Buffer.BlockCopy(_SessionIdentifierByteArray, 0, _ActualBuffer, 0, _SessionIdentifierByteArray.Length);
+			_SessionKeyFirstHalf = BitConverter.ToInt64(_SessionKeyByteArray, 0);
+			_SessionKeySecondHalf = BitConverter.ToInt64(_SessionKeyByteArray, 8);
+
+			Buffer.BlockCopy(_SessionIdentifierByteArray, 0, _ObfuscatedBuffer, 1, _SessionIdentifierByteArray.Length);
 
 			await _Serializer.Send(new KeyExchangeMessage
 			{
@@ -135,10 +146,17 @@ namespace ConnectionBridge
 
 		private void InitializeUdpBuffer()
 		{
-			_ActualBuffer = Enumerable
-								.Range(0, MTUSize)
-								.Select(x => (byte)(x % 128))
-								.ToArray();
+			_ObfuscatedBuffer = Enumerable
+									.Range(0, 1500)
+									.Select(x => (byte)(x % 128))
+									.ToArray();
+
+			_ObfuscatedBuffer[0] = ObfuscatedPacketSign;
+
+			_PlainBuffer = Enumerable
+									.Range(0, 1500)
+									.Select(x => (byte)(x % 128))
+									.ToArray();
 		}
 
 		private void InitLocalUdpServer()
@@ -194,79 +212,11 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				Logger.Debug($"Server: Received packet from a remote peer({message.EndPoint}), going to pipe it to {_RemoteUdpServer.RemoteEndPoint}");
-
-				if(message.Buffer.Length < 18)
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
-						$"client:{message.EndPoint} with size of {message.Buffer.Length}");
-
-					return;
-				}
-
-				var identifier = message.Buffer.Take(16).ToArray();
-				if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid session identifier from " +
-						$"client:{message.EndPoint} with expected identifer of {_SessionIdentifier}, " +
-						$"got:{(identifier.Length == 16 ? new Guid(identifier) : Encoding.ASCII.GetString(identifier))}");
-
-					return;
-				}
-
-				if(message.EndPoint.Address != _LocalUdpServer.RemoteEndPoint.Address && 
-					message.EndPoint.Port != _LocalUdpServer.RemoteEndPoint.Port)
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
-					_LocalUdpServer.ResetPeer();
-				}
-
-				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 16);
-
-				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length - 18}), actual packetSize:{actualPacketLength}");
-				
-				if (actualPacketLength > message.Buffer.Length - 18)
-				{
-					Logger.Warning($"Mismatch between actual packet size and length parameter," +
-						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
-
-					return;
-				}
-				//skip the identifier part
-				//add deobfuscation and such here (later)
-				_RemoteUdpServer.SendBack(message.Buffer.Skip(18).ToArray(), actualPacketLength);			
+				DecryptAndRedirect(_LocalUdpServer, _RemoteUdpServer, message);		
 			}
 			else
 			{
-				Logger.Debug($"Client: Received packet from a local application({message.EndPoint}), going to pipe it to server at {_RemoteUdpServer.RemoteEndPoint}");
-				
-				if(_ActualBuffer == null)
-				{
-					Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
-					return;
-				}
-
-				if(message.Buffer.Length + 18 > _ActualBuffer.Length)
-				{
-					Logger.Warning($"Application sent a message with a size that is bigger than send buffer, size:{message.Buffer.Length}");
-					return;
-				}
-
-
-				Buffer.BlockCopy(message.Buffer, 0, _ActualBuffer, 18, message.Buffer.Length);
-
-				var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
-
-				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
-
-				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length - 18;
-
-				//add identifier part here
-				//add obfuscatio and such here
-				_RemoteUdpServer.SendBack(_ActualBuffer, 
-					message.Buffer.Length + 18 + (_SendCounts % remainingBytesCount));
-
-				_SendCounts++;
+				EncryptAndRedirect(_RemoteUdpServer, message);
 			}
 		}
 
@@ -280,48 +230,83 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				Logger.Debug($"Server: Received packet from a local application({message.EndPoint}), going to send it to {_LocalUdpServer.RemoteEndPoint}");
-				
-				if (_ActualBuffer == null)
-				{
-					Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
-					return;
-				}
+				EncryptAndRedirect(_LocalUdpServer, message);
+			}
+			else
+			{
+				DecryptAndRedirect(_RemoteUdpServer, _LocalUdpServer, message);
+			}
+		}
 
-				if (message.Buffer.Length + 18 > _ActualBuffer.Length)
+		private void EncryptAndRedirect(UdpServer sendingServer, UdpMessageReceivedArgs message)
+		{
+			Logger.Debug($"Server: Received packet from application({message.EndPoint}), going to send it to {sendingServer.RemoteEndPoint}");
+
+			if (_ObfuscatedBuffer == null)
+			{
+				Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
+				return;
+			}
+
+			var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
+
+			if (HandshakePacketSizes.Contains(message.Buffer.Length))
+			{
+				if (message.Buffer.Length + 19 > _ObfuscatedBuffer.Length)
 				{
 					Logger.Warning($"Application sent a message with a size that is bigger than send buffer, size:{message.Buffer.Length}");
 					return;
 				}
 
-				Buffer.BlockCopy(message.Buffer, 0, _ActualBuffer, 18, message.Buffer.Length);
+				Logger.Debug($"Sending obfuscated packet");
 
-				var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
+				ApplyXoR(message.Buffer, message.Buffer.Length);
 
-				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
+				Buffer.BlockCopy(lengthByteArray, 0, _ObfuscatedBuffer, 17, lengthByteArray.Length);
 
-				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length - 18;
+				Buffer.BlockCopy(message.Buffer, 0, _ObfuscatedBuffer, 19, message.Buffer.Length);
+				
+				var remainingBytesCount = MTUSize - message.Buffer.Length - 19;
 
-				//add identifier part here
-				//add obfuscatio and such here
-				_LocalUdpServer.SendBack(_ActualBuffer,
-					message.Buffer.Length + 18 + (_SendCounts % remainingBytesCount));
-
-				_SendCounts++;
+				sendingServer.SendBack(_ObfuscatedBuffer,
+									message.Buffer.Length + (remainingBytesCount == 0 ? 0 : (_SendCounts % remainingBytesCount)) + 19);
 			}
 			else
 			{
-				if (message.Buffer.Length < 18)
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
-						$"client:{message.EndPoint} with size of {message.Buffer.Length}");
+				Logger.Debug($"Sending packet as plain");
 
-					return;
-				}
+				_ObfuscatedBuffer[0] = (byte)(_SendCounts % ObfuscatedPacketSign);
 
-				Logger.Debug($"Client: Received packet from the server({message.EndPoint}), going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
+				Buffer.BlockCopy(lengthByteArray, 0, _PlainBuffer, 1, lengthByteArray.Length);
 
-				var identifier = message.Buffer.Take(16).ToArray();
+				Buffer.BlockCopy(message.Buffer, 0, _PlainBuffer, 3, message.Buffer.Length);
+
+				var remainingBytesCount = MTUSize - message.Buffer.Length - 1;
+
+				sendingServer.SendBack(_PlainBuffer,
+							message.Buffer.Length + (remainingBytesCount == 0 ? 0 : (_SendCounts % remainingBytesCount)) + 3);
+			}
+			
+			_SendCounts++;
+		}
+
+		private void DecryptAndRedirect(UdpServer fromUdpServer, UdpServer toUdpServer, UdpMessageReceivedArgs message)
+		{
+			if (message.Buffer.Length < 19)
+			{
+				Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
+					$"client:{message.EndPoint} with size of {message.Buffer.Length}");
+
+				return;
+			}
+
+			Logger.Debug($"Client: Received packet from the server({message.EndPoint}), going to send it a local application at {_LocalUdpServer.RemoteEndPoint}");
+			
+			if (message.Buffer[0] == ObfuscatedPacketSign)
+			{
+				Logger.Debug("Receving obfuscated packet");
+
+				var identifier = message.Buffer.Skip(1).Take(16).ToArray();
 
 				if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
 				{
@@ -332,18 +317,18 @@ namespace ConnectionBridge
 					return;
 				}
 
-				if (message.EndPoint.Address != _RemoteUdpServer.RemoteEndPoint.Address &&
-					message.EndPoint.Port != _RemoteUdpServer.RemoteEndPoint.Port)
+				if (message.EndPoint.Address != fromUdpServer.RemoteEndPoint.Address &&
+					message.EndPoint.Port != fromUdpServer.RemoteEndPoint.Port)
 				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint} in localUdpServer");
-					_RemoteUdpServer.ResetPeer();
+					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint}");
+					fromUdpServer.ResetPeer();
 				}
 
-				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 16);
-				
-				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length-18}), actual packetSize:{actualPacketLength}");
+				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 17);
 
-				if(actualPacketLength > message.Buffer.Length - 18)
+				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length - 19}), actual packetSize:{actualPacketLength}");
+
+				if (actualPacketLength > message.Buffer.Length - 19)
 				{
 					Logger.Warning($"Mismatch between actual packet size and length parameter," +
 						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
@@ -351,11 +336,54 @@ namespace ConnectionBridge
 					return;
 				}
 
-				//skip the identifier part
-				//add deobfuscation and such here (later)
-				_LocalUdpServer.SendBack(message.Buffer.Skip(18).ToArray(), actualPacketLength);
+
+				toUdpServer.SendBack(ApplyXoR(message.Buffer.Skip(19).ToArray(), actualPacketLength), actualPacketLength);
+			}
+			else
+			{
+				Logger.Debug("Receving plain packet");
+
+				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 1);
+
+				if (actualPacketLength > message.Buffer.Length - 1)
+				{
+					Logger.Warning($"Mismatch between actual packet size and length parameter," +
+						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
+
+					return;
+				}
+
+				toUdpServer.SendBack(message.Buffer.Skip(3).ToArray(), actualPacketLength);
 			}
 		}
+
+		unsafe byte[] ApplyXoR(byte[] buffer, int length)
+		{
+			// First XOR as many 64-bit blocks as possible, for the sake of speed
+			fixed (byte* bufferPointer = buffer)
+			{
+				long* longBufferPointer = (long*)bufferPointer;
+
+				int chunks = length/ 8;
+
+				for (int p = 0; p < chunks; p++)
+				{
+					*longBufferPointer ^= _SessionKeyFirstHalf;
+
+					longBufferPointer++;
+				}
+
+				// Now cover any remaining bytes one byte at a time. We've
+				// already handled chunks * 8 bytes, so start there.
+				//for (int index = 0; chunks * 8 + index < buffer.Length; index++)
+				//{
+				//	buffer[chunks * 8 + index] ^= _SessionKeyByteArray[index];
+				//}
+			}
+
+			return buffer;
+		}
+
 
 		public void Dispose()
 		{

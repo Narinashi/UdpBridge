@@ -129,12 +129,13 @@ namespace ConnectionBridge
 
 				var message = $"An exception occured in Send UdpBridge, \r\n{ex}";
 
-				if (ex is ObjectDisposedException || ex is SocketException)
+				if (ex is ObjectDisposedException || ex is SocketException || ex is InvalidOperationException)
 					Logger.Warning(message);
 				else
 					Logger.Error(message);
 
-				if (!(_Client.Client?.Connected ?? false))
+				if ((_Client.Client?.SafeHandle?.IsInvalid ?? true) ||
+					(_Client.Client?.SafeHandle?.IsClosed ?? true))
 					OnDisconnected?.Invoke();
 			}
 		}

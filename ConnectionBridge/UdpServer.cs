@@ -41,7 +41,9 @@ namespace ConnectionBridge
 			};
 
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-				_Client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);		
+				_Client.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+
+			_Client.Client.ReceiveBufferSize = _Client.Client.SendBufferSize = 130000;
 
 			_EndReceiveCallback = new AsyncCallback(EndReceieve);
 			_EndSendCallback = new AsyncCallback(EndSend);

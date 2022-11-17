@@ -259,12 +259,12 @@ namespace ConnectionBridge
 
 				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
 
-				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length;
+				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length - 18;
 
 				//add identifier part here
 				//add obfuscatio and such here
 				_RemoteUdpServer.SendBack(_ActualBuffer, 
-					message.Buffer.Length + Math.Max(5, remainingBytesCount));
+					message.Buffer.Length + 18 + (_SendCounts % remainingBytesCount));
 
 				_SendCounts++;
 			}
@@ -300,12 +300,12 @@ namespace ConnectionBridge
 
 				Buffer.BlockCopy(lengthByteArray, 0, _ActualBuffer, 16, 2);
 
-				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length;
+				var remainingBytesCount = _ActualBuffer.Length - message.Buffer.Length - 18;
 
 				//add identifier part here
 				//add obfuscatio and such here
 				_LocalUdpServer.SendBack(_ActualBuffer,
-					message.Buffer.Length + Math.Max(5, remainingBytesCount));
+					message.Buffer.Length + 18 + (_SendCounts % remainingBytesCount));
 
 				_SendCounts++;
 			}

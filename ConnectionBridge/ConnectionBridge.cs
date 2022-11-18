@@ -242,145 +242,170 @@ namespace ConnectionBridge
 		{
 			Logger.Debug($"Server: Received packet from application({message.EndPoint}), going to send it to {sendingServer.RemoteEndPoint}");
 
-			if (_ObfuscatedBuffer == null)
-			{
-				Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
-				return;
-			}
+			//if (_ObfuscatedBuffer == null)
+			//{
+			//	Logger.Warning($"Udp Send buffer is null, (did we handshake yet?)");
+			//	return;
+			//}
 
-			var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
+			//var lengthByteArray = BitConverter.GetBytes((short)message.Buffer.Length);
 
-			if (HandshakePacketSizes.Contains(message.Buffer.Length))
-			{
-				if (message.Buffer.Length + 19 > _ObfuscatedBuffer.Length)
-				{
-					Logger.Warning($"Application sent a message with a size that is bigger than send buffer, size:{message.Buffer.Length}");
-					return;
-				}
+			//if (HandshakePacketSizes.Contains(message.Buffer.Length))
+			//{
+			//	if (message.Buffer.Length + 19 > _ObfuscatedBuffer.Length)
+			//	{
+			//		Logger.Warning($"Application sent a message with a size that is bigger than send buffer, size:{message.Buffer.Length}");
+			//		return;
+			//	}
+			//
+			//	Logger.Debug($"Sending obfuscated packet");
+			//
+			//	message.Buffer = ApplyXoR(message.Buffer, message.Buffer.Length);
+			//
+			//	Buffer.BlockCopy(lengthByteArray, 0, _ObfuscatedBuffer, 17, lengthByteArray.Length);
+			//
+			//	Buffer.BlockCopy(message.Buffer, 0, _ObfuscatedBuffer, 19, message.Buffer.Length);
+			//	
+			//	var remainingBytesCount = MTUSize - message.Buffer.Length - 19;
+			//
+			//	sendingServer.SendBack(_ObfuscatedBuffer,
+			//						message.Buffer.Length + (remainingBytesCount == 0 ? 0 : (_SendCounts % remainingBytesCount)) + 19);
+			//}
+			//else
+			//{
+			//	Logger.Debug($"Sending packet as plain");
+			//
+			//	_ObfuscatedBuffer[0] = (byte)(_SendCounts % ObfuscatedPacketSign);
+			//
+			//	Buffer.BlockCopy(lengthByteArray, 0, _PlainBuffer, 1, lengthByteArray.Length);
+			//
+			//	Buffer.BlockCopy(message.Buffer, 0, _PlainBuffer, 3, message.Buffer.Length);
+			//
+			//	var remainingBytesCount = MTUSize - message.Buffer.Length - 1;
+			//
+			//	sendingServer.SendBack(_PlainBuffer,
+			//				message.Buffer.Length + (remainingBytesCount == 0 ? 0 : (_SendCounts % remainingBytesCount)) + 3);
+			//}
 
-				Logger.Debug($"Sending obfuscated packet");
+			sendingServer.SendBack(ApplyXoR(message.Buffer, message.Buffer.Length).Reverse().ToArray(), message.Buffer.Length);
 
-				//message.Buffer = ApplyXoR(message.Buffer, message.Buffer.Length);
-
-				Buffer.BlockCopy(lengthByteArray, 0, _ObfuscatedBuffer, 17, lengthByteArray.Length);
-
-				Buffer.BlockCopy(message.Buffer, 0, _ObfuscatedBuffer, 19, message.Buffer.Length);
-				
-				var remainingBytesCount = MTUSize - message.Buffer.Length - 19;
-
-				sendingServer.SendBack(_ObfuscatedBuffer,
-									message.Buffer.Length + (remainingBytesCount == 0 ? 0 : (_SendCounts % remainingBytesCount)) + 19);
-			}
-			else
-			{
-				Logger.Debug($"Sending packet as plain");
-
-				_ObfuscatedBuffer[0] = (byte)(_SendCounts % ObfuscatedPacketSign);
-
-				Buffer.BlockCopy(lengthByteArray, 0, _PlainBuffer, 1, lengthByteArray.Length);
-
-				Buffer.BlockCopy(message.Buffer, 0, _PlainBuffer, 3, message.Buffer.Length);
-
-				var remainingBytesCount = MTUSize - message.Buffer.Length - 1;
-
-				sendingServer.SendBack(_PlainBuffer,
-							message.Buffer.Length + (remainingBytesCount == 0 ? 0 : (_SendCounts % remainingBytesCount)) + 3);
-			}
-			
-			_SendCounts++;
+			//_SendCounts++;
 		}
 
 		private void DecryptAndRedirect(UdpServer fromUdpServer, UdpServer toUdpServer, UdpMessageReceivedArgs message)
 		{
-			if (message.Buffer.Length < 19)
-			{
-				Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
-					$"client:{message.EndPoint} with size of {message.Buffer.Length}");
-
-				return;
-			}
+			//if (message.Buffer.Length < 19)
+			//{
+			//	Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid packet from " +
+			//		$"client:{message.EndPoint} with size of {message.Buffer.Length}");
+			//
+			//	return;
+			//}
 
 			Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Received packet from remote({message.EndPoint}), going to send it a local application at {toUdpServer.RemoteEndPoint}");
-			
-			if (message.Buffer[0] == ObfuscatedPacketSign)
-			{
-				Logger.Debug("Receving obfuscated packet");
 
-				var identifier = message.Buffer.Skip(1).Take(16).ToArray();
-
-				if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid session identifier from " +
-						$"client:{message.EndPoint} with expected identifer of {_SessionIdentifier}, " +
-						$"got:{(identifier.Length == 16 ? new Guid(identifier) : Encoding.ASCII.GetString(identifier))}");
-
-					return;
-				}
-
-				if (message.EndPoint.Address != fromUdpServer.RemoteEndPoint.Address &&
-					message.EndPoint.Port != fromUdpServer.RemoteEndPoint.Port)
-				{
-					Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint}");
-					fromUdpServer.ResetPeer();
-				}
-
-				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 17);
-
-				Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length - 19}), actual packetSize:{actualPacketLength}");
-
-				if (actualPacketLength > message.Buffer.Length - 19)
-				{
-					Logger.Warning($"Mismatch between actual packet size and length parameter," +
-						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
-
-					return;
-				}
-
-
-				//toUdpServer.SendBack(ApplyXoR(message.Buffer.Skip(19).ToArray(), actualPacketLength), actualPacketLength);
-				toUdpServer.SendBack(message.Buffer.Skip(19).ToArray(), actualPacketLength);
-			}
-			else
-			{
-				Logger.Debug("Receving plain packet");
-
-				var actualPacketLength = BitConverter.ToInt16(message.Buffer, 1);
-
-				if (actualPacketLength > message.Buffer.Length - 3)
-				{
-					Logger.Warning($"Mismatch between actual packet size and length parameter," +
-						$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
-
-					return;
-				}
-
-				toUdpServer.SendBack(message.Buffer.Skip(3).ToArray(), actualPacketLength);
-			}
+			//if (message.Buffer[0] == ObfuscatedPacketSign)
+			//{
+			//	Logger.Debug("Receving obfuscated packet");
+			//
+			//	var identifier = message.Buffer.Skip(1).Take(16).ToArray();
+			//
+			//	if (!identifier.SequenceEqual(_SessionIdentifierByteArray))
+			//	{
+			//		Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Invalid session identifier from " +
+			//			$"client:{message.EndPoint} with expected identifer of {_SessionIdentifier}, " +
+			//			$"got:{(identifier.Length == 16 ? new Guid(identifier) : Encoding.ASCII.GetString(identifier))}");
+			//
+			//		return;
+			//	}
+			//
+			//	if (message.EndPoint.Address != fromUdpServer.RemoteEndPoint.Address &&
+			//		message.EndPoint.Port != fromUdpServer.RemoteEndPoint.Port)
+			//	{
+			//		Logger.Warning($"{(_ServerMode ? "Server: " : "Client: ")}Reseting peer endpoint from {_LocalUdpServer.RemoteEndPoint} to {message.EndPoint}");
+			//		fromUdpServer.ResetPeer();
+			//	}
+			//
+			//	var actualPacketLength = BitConverter.ToInt16(message.Buffer, 17);
+			//
+			//	Logger.Debug($"{(_ServerMode ? "Server: " : "Client: ")}Packet size:{message.Buffer.Length}({message.Buffer.Length - 19}), actual packetSize:{actualPacketLength}");
+			//
+			//	if (actualPacketLength > message.Buffer.Length - 19)
+			//	{
+			//		Logger.Warning($"Mismatch between actual packet size and length parameter," +
+			//			$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
+			//
+			//		return;
+			//	}
+			//
+			//
+			//	toUdpServer.SendBack(ApplyXoR(message.Buffer.Skip(19).Take(actualPacketLength).ToArray(), actualPacketLength), actualPacketLength);
+			//	//toUdpServer.SendBack(message.Buffer.Skip(19).ToArray(), actualPacketLength);
+			//}
+			//else
+			//{
+			//	Logger.Debug("Receving plain packet");
+			//
+			//	var actualPacketLength = BitConverter.ToInt16(message.Buffer, 1);
+			//
+			//	if (actualPacketLength > message.Buffer.Length - 3)
+			//	{
+			//		Logger.Warning($"Mismatch between actual packet size and length parameter," +
+			//			$" LengthParameter:{actualPacketLength}, PacketSize(excluding headers):{message.Buffer.Length}");
+			//
+			//		return;
+			//	}
+			//
+			//	toUdpServer.SendBack(message.Buffer.Skip(3).ToArray(), actualPacketLength);
+			//}
+			toUdpServer.SendBack(ApplyXoR(message.Buffer.Reverse().ToArray(), message.Buffer.Length), message.Buffer.Length);
 		}
 
 		unsafe byte[] ApplyXoR(byte[] buffer, int length)
 		{
 			// First XOR as many 64-bit blocks as possible, for the sake of speed
-			fixed (byte* bufferPointer = buffer)
+			//fixed (byte* bufferPointer = buffer)
+			//{
+			//	long* longBufferPointer = (long*)bufferPointer;
+			//
+			//	int chunks = length/ 8;
+			//
+			//	for (int p = 0; p < chunks; p++)
+			//	{
+			//		*longBufferPointer ^= _SessionKeyFirstHalf;
+			//
+			//		longBufferPointer++;
+			//	}
+			//
+			//	// Now cover any remaining bytes one byte at a time. We've
+			//	// already handled chunks * 8 bytes, so start there.
+			//	//for (int index = 0; chunks * 8 + index < buffer.Length; index++)
+			//	//{
+			//	//	buffer[chunks * 8 + index] ^= _SessionKeyByteArray[index];
+			//	//}
+			//}
+			var chunks = length / 16;
+
+			for(int i =0; i < chunks; i++)
 			{
-				long* longBufferPointer = (long*)bufferPointer;
-
-				int chunks = length/ 8;
-
-				for (int p = 0; p < chunks; p++)
-				{
-					*longBufferPointer ^= _SessionKeyFirstHalf;
-
-					longBufferPointer++;
-				}
-
-				// Now cover any remaining bytes one byte at a time. We've
-				// already handled chunks * 8 bytes, so start there.
-				//for (int index = 0; chunks * 8 + index < buffer.Length; index++)
-				//{
-				//	buffer[chunks * 8 + index] ^= _SessionKeyByteArray[index];
-				//}
+				buffer[chunks * i + 0] ^= _SessionKeyByteArray[0];
+				buffer[chunks * i + 1] ^= _SessionKeyByteArray[1];
+				buffer[chunks * i + 2] ^= _SessionKeyByteArray[2];
+				buffer[chunks * i + 3] ^= _SessionKeyByteArray[3];
+				buffer[chunks * i + 4] ^= _SessionKeyByteArray[4];
+				buffer[chunks * i + 5] ^= _SessionKeyByteArray[5];
+				buffer[chunks * i + 6] ^= _SessionKeyByteArray[6];
+				buffer[chunks * i + 7] ^= _SessionKeyByteArray[7];
+				buffer[chunks * i + 8] ^= _SessionKeyByteArray[8];
+				buffer[chunks * i + 9] ^= _SessionKeyByteArray[9];
+				buffer[chunks * i + 10] ^= _SessionKeyByteArray[10];
+				buffer[chunks * i + 11] ^= _SessionKeyByteArray[11];
+				buffer[chunks * i + 12] ^= _SessionKeyByteArray[12];
+				buffer[chunks * i + 13] ^= _SessionKeyByteArray[13];
+				buffer[chunks * i + 14] ^= _SessionKeyByteArray[14];
+				buffer[chunks * i + 14] ^= _SessionKeyByteArray[15];
 			}
+
 
 			return buffer;
 		}

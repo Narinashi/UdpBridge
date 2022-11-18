@@ -60,7 +60,7 @@ namespace ConnectionBridge
 
 			if (_SecureChannel.PeerEndPoint is null)
 				throw new ArgumentException("TCP Connection hasnt been initiated yet");
-			
+
 			InitializeUdpBuffer();
 
 			_Deserializer = new MessageDeserializer(_SecureChannel, _MessageBufferSize);
@@ -82,7 +82,7 @@ namespace ConnectionBridge
 
 					if (_ServerMode)
 						_Serializer.Send(new HelloMessage { Message = hello.Message });
-					
+
 					if (Disposed)
 						return;
 
@@ -177,8 +177,8 @@ namespace ConnectionBridge
 								new UdpServer(_LocalUdpServerAddress, _LocalUdpServerPort);
 
 			_LocalUdpServer.AddListener(_ServerMode ? _SecureChannel.PeerEndPoint.Address.MapToIPv4() : IPAddress.Any, OnLocalUdpServerMessageReceived);
-			
-			_LocalUdpServer.OnDisconnected= InitLocalUdpServer;
+
+			_LocalUdpServer.OnDisconnected = InitLocalUdpServer;
 		}
 
 		private void InitRemoteUdpServer()
@@ -212,7 +212,7 @@ namespace ConnectionBridge
 
 			if (_ServerMode)
 			{
-				DecryptAndRedirect(_LocalUdpServer, _RemoteUdpServer, message);		
+				DecryptAndRedirect(_LocalUdpServer, _RemoteUdpServer, message);
 			}
 			else
 			{
@@ -384,29 +384,28 @@ namespace ConnectionBridge
 			//	//	buffer[chunks * 8 + index] ^= _SessionKeyByteArray[index];
 			//	//}
 			//}
+
 			var chunks = length / 16;
 
-			for(int i =0; i < chunks; i++)
+			for (int i = 0; i < chunks; i++)
 			{
-				buffer[chunks * i + 0] ^= _SessionKeyByteArray[0];
-				buffer[chunks * i + 1] ^= _SessionKeyByteArray[1];
-				buffer[chunks * i + 2] ^= _SessionKeyByteArray[2];
-				buffer[chunks * i + 3] ^= _SessionKeyByteArray[3];
-				buffer[chunks * i + 4] ^= _SessionKeyByteArray[4];
-				buffer[chunks * i + 5] ^= _SessionKeyByteArray[5];
-				buffer[chunks * i + 6] ^= _SessionKeyByteArray[6];
-				buffer[chunks * i + 7] ^= _SessionKeyByteArray[7];
-				buffer[chunks * i + 8] ^= _SessionKeyByteArray[8];
-				buffer[chunks * i + 9] ^= _SessionKeyByteArray[9];
-				buffer[chunks * i + 10] ^= _SessionKeyByteArray[10];
-				buffer[chunks * i + 11] ^= _SessionKeyByteArray[11];
-				buffer[chunks * i + 12] ^= _SessionKeyByteArray[12];
-				buffer[chunks * i + 13] ^= _SessionKeyByteArray[13];
-				buffer[chunks * i + 14] ^= _SessionKeyByteArray[14];
-				buffer[chunks * i + 14] ^= _SessionKeyByteArray[15];
+				buffer[16 * i + 0] ^= _SessionKeyByteArray[0];
+				buffer[16 * i + 1] ^= _SessionKeyByteArray[1];
+				buffer[16 * i + 2] ^= _SessionKeyByteArray[2];
+				buffer[16 * i + 3] ^= _SessionKeyByteArray[3];
+				buffer[16 * i + 4] ^= _SessionKeyByteArray[4];
+				buffer[16 * i + 5] ^= _SessionKeyByteArray[5];
+				buffer[16 * i + 6] ^= _SessionKeyByteArray[6];
+				buffer[16 * i + 7] ^= _SessionKeyByteArray[7];
+				buffer[16 * i + 8] ^= _SessionKeyByteArray[8];
+				buffer[16 * i + 9] ^= _SessionKeyByteArray[9];
+				buffer[16 * i + 10] ^= _SessionKeyByteArray[10];
+				buffer[16 * i + 11] ^= _SessionKeyByteArray[11];
+				buffer[16 * i + 12] ^= _SessionKeyByteArray[12];
+				buffer[16 * i + 13] ^= _SessionKeyByteArray[13];
+				buffer[16 * i + 14] ^= _SessionKeyByteArray[14];
+				buffer[16 * i + 15] ^= _SessionKeyByteArray[15];
 			}
-
-
 			return buffer;
 		}
 

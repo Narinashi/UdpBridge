@@ -46,11 +46,11 @@ namespace ConnectionBridge
 			}
 			else if (args?.Length == 1)
 			{
-				Logger.Info("In order to run the program as server mode use these params");
-				Logger.Info(GetHowToRunMessage(true));
+				Logger.Info(() => "In order to run the program as server mode use these params");
+				Logger.Info(() => GetHowToRunMessage(true));
 
-				Logger.Info("In order to run the program as client mode use these params");
-				Logger.Info(GetHowToRunMessage(false));
+				Logger.Info(() => "In order to run the program as client mode use these params");
+				Logger.Info(() => GetHowToRunMessage(false));
 			}
 			else
 			{
@@ -71,46 +71,19 @@ namespace ConnectionBridge
 				}
 				else
 				{
-					await StartClientMode(PromptStringParameter("sslServerAddress"),
-											PromptIntParameter("sslServerPort"),
-											PromptStringParameter("trustedHostName"),
-											PromptIntParameter("udpServerLocalPort"),
-											PromptStringParameter("udpServerRemoteAddress"),
-											PromptIntParameter("udpServerRemotePort")
-											);
+					//await StartClientMode(PromptStringParameter("sslServerAddress"),
+					//						PromptIntParameter("sslServerPort"),
+					//						PromptStringParameter("trustedHostName"),
+					//						PromptIntParameter("udpServerLocalPort"),
+					//						PromptStringParameter("udpServerRemoteAddress"),
+					//						PromptIntParameter("udpServerRemotePort")
+					//						);
+
+					await StartClientMode("51.75.68.16", 42069, "WrexUwU", 1111, "51.75.68.16", 39911);
 
 				}
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}
-
-#if DEBUG
-			var localAppOnClient = new UdpClient();
-			var localAppOnServer = new UdpClient(9999);
-
-			var buffer = Encoding.ASCII.GetBytes("010203040506070809101112131415161718192021222324252627282930");
-			var ep = new IPEndPoint(IPAddress.Any, 0);
-
-			while (true)
-			{
-				Console.WriteLine("local app on client sends to server");
-				localAppOnClient.Send(buffer, buffer.Length, new IPEndPoint(IPAddress.Parse("127.0.0.1"), 1111));
-
-				var recevingBuffer = localAppOnClient.Receive(ref ep);
-
-				Console.WriteLine("local app on server receives");
-				Console.WriteLine("local app on server wants to send to client");
-
-				//localAppOnServer.Send(recevingBuffer, recevingBuffer.Length, ep);
-
-				//var sendingBuffer = localAppOnClient.Receive(ref ep);
-
-				//Debug.Assert(recevingBuffer.SequenceEqual(sendingBuffer));
-
-				Console.WriteLine("local app on client receives from server");
-
-				Console.ReadLine();
-			}
-#endif
 		}
 
 
@@ -123,26 +96,26 @@ namespace ConnectionBridge
 		{
 			try
 			{
-				Logger.Info($"Initiating in ClientMode ...");
+				Logger.Info(() => $"Initiating in ClientMode ...");
 
 				var secureChannel = await SecureChannel.ConnectTo(sslServerAddress, sslServerPort, trustedHostName, 4096);
 				secureChannel.StartReceiving();
 
-				Logger.Info($"Initiating ConnectionBridge ...");
+				Logger.Info(() => $"Initiating ConnectionBridge ...");
 
 				_ConnectionBridge = new ConnectionBridge(secureChannel,
-														string.Empty,
+														"127.0.0.1",
 														udpServerLocalPort,
 														udpServerRemoteAddress,
 														udpServerRemotePort);
 
 				await _ConnectionBridge.Handshake();
 
-				Logger.Info($"ConnectionBridge Handshake complete");
+				Logger.Info(() => $"ConnectionBridge Handshake complete");
 			}
 			catch (Exception ex)
 			{
-				Logger.Error($"An exception occurred while trying to connect to server, \r\n{ex}");
+				Logger.Error(() => $"An exception occurred while trying to connect to server, \r\n{ex}");
 				await StartClientMode(sslServerAddress,
 										sslServerPort,
 										trustedHostName,
@@ -162,7 +135,7 @@ namespace ConnectionBridge
 										string udpServerRemoteAddress,
 										int udpServerRemotePort)
 		{
-			Logger.Info($"Initiating in ServerMode ...");
+			Logger.Info(() => $"Initiating in ServerMode ...");
 
 			var cert = new X509Certificate2(sslCertificateFileAddress, sslCertificatePassword);
 			var listener = new SecureChannelListener(sslServerListeningPort);
@@ -171,17 +144,17 @@ namespace ConnectionBridge
 			{
 				try
 				{
-					Logger.Debug($"Awaiting new connection");
+					Logger.Debug(() => $"Awaiting new connection");
 
 					TcpClient client = listener.AcceptConnection();
 
 					client.ReceiveTimeout = client.SendTimeout = 20000;
 
-					Logger.Info($"New TCP Connection from {client.Client?.RemoteEndPoint}");
+					Logger.Info(() => $"New TCP Connection from {client.Client?.RemoteEndPoint}");
 
 					if (_ConnectionBridge != null)
 					{
-						Logger.Debug("Connection bridge already instatiated, going to dispose the coming connection");
+						Logger.Debug(() => "Connection bridge already instatiated, going to dispose the coming connection");
 						client.Dispose();
 
 						continue;
@@ -191,7 +164,7 @@ namespace ConnectionBridge
 					Task authenticationTask = secureChannel.Authenticate();
 
 					ConnectionBridge connectionBridge = new(secureChannel,
-																string.Empty,
+																"127.0.0.1",
 																udpServerLocalPort,
 																udpServerRemoteAddress,
 																udpServerRemotePort, true);
@@ -200,7 +173,7 @@ namespace ConnectionBridge
 						var bridge = connectionBridge;
 						var channel = secureChannel;
 
-						Logger.Debug($"Connection {channel.PeerEndPoint} has been disconnected");
+						Logger.Debug(() => $"Connection {channel.PeerEndPoint} has been disconnected");
 
 						bridge.Dispose();
 					};
@@ -210,17 +183,17 @@ namespace ConnectionBridge
 						var bridge = connectionBridge;
 						var channel = secureChannel;
 
-						Logger.Debug($"Awaiting authentication for {channel.PeerEndPoint}");
+						Logger.Debug(() => $"Awaiting authentication for {channel.PeerEndPoint}");
 						if ((await Task.WhenAny(Task.Delay(AuthenticationTimeout), authenticationTask)) != authenticationTask)
 						{
-							Logger.Debug($"SSL authentication failed for {channel.PeerEndPoint}");
+							Logger.Debug(() => $"SSL authentication failed for {channel.PeerEndPoint}");
 
 							bridge.Dispose();
 
 							return;
 						}
 
-						Logger.Debug($"authentication succeded for {channel.PeerEndPoint}");
+						Logger.Debug(() => $"authentication succeded for {channel.PeerEndPoint}");
 
 						channel.StartReceiving();
 
@@ -228,7 +201,7 @@ namespace ConnectionBridge
 
 						if(!bridge.IsAuthenticated)
 						{
-							Logger.Debug($"authentication failed for {channel.PeerEndPoint}");
+							Logger.Debug(() => $"authentication failed for {channel.PeerEndPoint}");
 
 							bridge.Dispose();
 
@@ -238,7 +211,7 @@ namespace ConnectionBridge
 						_ConnectionBridge = bridge;
 						channel.OnClientDisconnected = () =>
 						{
-							Logger.Debug($"Connection {channel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
+							Logger.Debug(() => $"Connection {channel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
 
 							_ConnectionBridge.Dispose();
 							_ConnectionBridge = null;
@@ -247,7 +220,7 @@ namespace ConnectionBridge
 				}
 				catch (Exception ex)
 				{
-					Logger.Error($"an exception occured in listener connection acceptance loop \r\n{ex}");
+					Logger.Error(() => $"an exception occured in listener connection acceptance loop \r\n{ex}");
 				}
 			}
 		}

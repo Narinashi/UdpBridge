@@ -62,7 +62,7 @@ namespace ConnectionBridge
 			if (remainingBytesInBuffer > 0)
 				Buffer.BlockCopy(_MessageBuffer, (int)_MessageBufferStream.Position, _MessageBuffer, 0, remainingBytesInBuffer);
 			else if (remainingBytesInBuffer < 0)
-				Logger.Warning($"Remaining bytes in MessageBuffer is {remainingBytesInBuffer}, which shouldnt happen");
+				Logger.Warning(() => $"Remaining bytes in MessageBuffer is {remainingBytesInBuffer}, which shouldnt happen");
 
 			_BufferOffset = remainingBytesInBuffer;
 			_MessageBufferStream.Position = 0;
@@ -83,7 +83,7 @@ namespace ConnectionBridge
 					message = new KeyExchangeMessage();
 					break;
 				default:
-					Logger.Warning($"Invalid MessgeType:{type}, len:{length}");
+					Logger.Warning(() => $"Invalid MessgeType:{type}, len:{length}");
 					return null;
 			}
 

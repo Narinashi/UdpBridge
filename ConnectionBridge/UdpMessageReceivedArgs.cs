@@ -10,6 +10,8 @@ namespace ConnectionBridge
 	class UdpMessageReceivedArgs 
 	{
 		public byte[] Buffer;
+		public long Offset;
+		public long Size;
 		public IPEndPoint EndPoint;
 	}
 }

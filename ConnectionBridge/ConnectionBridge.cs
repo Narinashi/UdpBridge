@@ -137,10 +137,12 @@ namespace ConnectionBridge
 				Logger.Error(() => $"{(_ServerMode ? "Server: " : "Client: ")}Received message from local while session identifier is null, EP:{message.EndPoint}");
 				return;
 			}
+			
+			Logger.Debug(() => $"Local Message Received from {message.EndPoint}");
 
-			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4())
+			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4() && _ServerMode)
 				Logger.Warning(() => $"received packet from invalid peer {message.EndPoint.Address}");
-
+			
 			_SourceEndpoint = message.EndPoint;
 			ApplyXoR(message.Buffer, message.Offset, message.Size);
 			_RemoteUdpServer.SendAsync(message.Buffer, message.Offset, message.Size);
@@ -161,6 +163,8 @@ namespace ConnectionBridge
 				Logger.Warning(() => $"Source endpoint is null");
 				return;
 			}
+
+			Logger.Debug(() => $"Remote Message Received from {message.EndPoint}");
 
 			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4())
 				Logger.Warning(() => $"received packet from invalid peer {message.EndPoint.Address}");

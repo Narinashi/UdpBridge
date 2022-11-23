@@ -1,17 +1,9 @@
 using System;
 using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-using System.Diagnostics;
-
-using System.Net;
 using System.Net.Sockets;
-
-using System.Security.Cryptography.X509Certificates;
-
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
+using System.Threading.Tasks;
 
 namespace ConnectionBridge
 {
@@ -31,15 +23,15 @@ namespace ConnectionBridge
 				for (int i = 0; i < args.Length; i++)
 					args[i] = args[i].Replace("\"", string.Empty);
 
-				Logger.LogLevel = args.Length > 7 && Enum.TryParse(args[7], true, out LogLevel ll) ? ll : LogLevel.Info;
+				Logger.LogLevel = args.Length > 8 && Enum.TryParse(args[8], true, out LogLevel ll) ? ll : LogLevel.Info;
 
 				if (_ServerMode)
 				{
-					await StartServerMode(args[1], args[2], int.Parse(args[3]), int.Parse(args[4]), args[5], int.Parse(args[6]));
+					await StartServerMode(args[1], args[2], int.Parse(args[3]), args[4], int.Parse(args[5]), args[6], int.Parse(args[7]));
 				}
 				else
 				{
-					await StartClientMode(args[1], int.Parse(args[2]), args[3], int.Parse(args[4]), args[5], int.Parse(args[6]));
+					await StartClientMode(args[1], int.Parse(args[2]), args[3], args[4], int.Parse(args[5]), args[6], int.Parse(args[7]));
 				}
 
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
@@ -64,6 +56,7 @@ namespace ConnectionBridge
 					await StartServerMode(PromptStringParameter("sslCertificateFileAddress"),
 											PromptStringParameter("sslCertificatePassword"),
 											PromptIntParameter("sslServerListeningPort"),
+											PromptStringParameter("udpServerLocalAddress"),
 											PromptIntParameter("udpServerLocalPort"),
 											PromptStringParameter("udpServerRemoteAddress"),
 											PromptIntParameter("udpServerRemotePort")
@@ -74,12 +67,13 @@ namespace ConnectionBridge
 					//await StartClientMode(PromptStringParameter("sslServerAddress"),
 					//						PromptIntParameter("sslServerPort"),
 					//						PromptStringParameter("trustedHostName"),
+					//						PromptStringParameter("udpServerLocalAddress"),
 					//						PromptIntParameter("udpServerLocalPort"),
 					//						PromptStringParameter("udpServerRemoteAddress"),
 					//						PromptIntParameter("udpServerRemotePort")
 					//						);
 
-					await StartClientMode("51.75.68.16", 42069, "WrexUwU", 1111, "51.75.68.16", 39911);
+					await StartClientMode("51.75.68.16", 42069, "WrexUwU", "127.0.0.1", 1111, "51.75.68.16", 39911);
 
 				}
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
@@ -90,6 +84,7 @@ namespace ConnectionBridge
 		static async Task StartClientMode(string sslServerAddress,
 											int sslServerPort,
 											string trustedHostName,
+											string udpServerLocalAddress,
 											int udpServerLocalPort,
 											string udpServerRemoteAddress,
 											int udpServerRemotePort)
@@ -104,7 +99,7 @@ namespace ConnectionBridge
 				Logger.Info(() => $"Initiating ConnectionBridge ...");
 
 				_ConnectionBridge = new ConnectionBridge(secureChannel,
-														"127.0.0.1",
+														udpServerLocalAddress,
 														udpServerLocalPort,
 														udpServerRemoteAddress,
 														udpServerRemotePort);
@@ -119,6 +114,7 @@ namespace ConnectionBridge
 				await StartClientMode(sslServerAddress,
 										sslServerPort,
 										trustedHostName,
+										udpServerLocalAddress,
 										udpServerLocalPort,
 										udpServerRemoteAddress,
 										udpServerRemotePort);
@@ -131,6 +127,7 @@ namespace ConnectionBridge
 		static async Task StartServerMode(string sslCertificateFileAddress,
 										string sslCertificatePassword,
 										int sslServerListeningPort,
+										string udpServerLocalAddress,
 										int udpServerLocalPort,
 										string udpServerRemoteAddress,
 										int udpServerRemotePort)
@@ -164,7 +161,7 @@ namespace ConnectionBridge
 					Task authenticationTask = secureChannel.Authenticate();
 
 					ConnectionBridge connectionBridge = new(secureChannel,
-																"127.0.0.1",
+																udpServerLocalAddress,
 																udpServerLocalPort,
 																udpServerRemoteAddress,
 																udpServerRemotePort, true);
@@ -199,7 +196,7 @@ namespace ConnectionBridge
 
 						await Task.Delay(AuthenticationTimeout);
 
-						if(!bridge.IsAuthenticated)
+						if (!bridge.IsAuthenticated)
 						{
 							Logger.Debug(() => $"authentication failed for {channel.PeerEndPoint}");
 

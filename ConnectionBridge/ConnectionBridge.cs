@@ -36,6 +36,8 @@ namespace ConnectionBridge
 		byte[] _SessionIdentifierByteArray;
 		byte[] _SessionDummyByteArray;
 
+		EndPoint _SourceEndpoint;
+
 		public bool Disposed { get; private set; }
 
 		const int _MessageBufferSize = 4096;
@@ -80,6 +82,9 @@ namespace ConnectionBridge
 
 					_LocalUdpServer.Start();
 					_RemoteUdpServer.Connect();
+
+					_LocalUdpServer.ReceiveAsync();
+					_RemoteUdpServer.ReceiveAsync();
 				}
 				else if (message is KeyExchangeMessage keyExchange)
 				{
@@ -133,8 +138,14 @@ namespace ConnectionBridge
 				return;
 			}
 
+			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4())
+				Logger.Warning(() => $"received packet from invalid peer {message.EndPoint.Address}");
+
+			_SourceEndpoint = message.EndPoint;
 			ApplyXoR(message.Buffer, message.Offset, message.Size);
-			_RemoteUdpServer.SendAsync(message.Buffer, message.Offset, message.Size);		
+			_RemoteUdpServer.SendAsync(message.Buffer, message.Offset, message.Size);
+
+			_LocalUdpServer.ReceiveAsync();
 		}
 
 		private void OnRemoteUdpServerMessageReceived(UdpMessageReceivedArgs message)
@@ -145,11 +156,19 @@ namespace ConnectionBridge
 				return;
 			}
 
-			if (message.EndPoint.Address != _SecureChannel.PeerEndPoint.Address)
+			if(_SourceEndpoint == null)
+			{
+				Logger.Warning(() => $"Source endpoint is null");
+				return;
+			}
+
+			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4())
 				Logger.Warning(() => $"received packet from invalid peer {message.EndPoint.Address}");
 
 			ApplyXoR(message.Buffer, message.Offset, message.Size);
-			_LocalUdpServer.SendAsync(message.EndPoint, message.Buffer, message.Offset, message.Size);
+			_LocalUdpServer.SendAsync(_SourceEndpoint, message.Buffer, message.Offset, message.Size);
+
+			_RemoteUdpServer.ReceiveAsync();
 		}
 
 

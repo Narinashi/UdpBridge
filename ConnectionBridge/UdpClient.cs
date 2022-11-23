@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,6 +17,8 @@ namespace ConnectionBridge
 
 		readonly UdpMessageReceivedArgs _Args = new();
 
+		const int SIO_UDP_CONNRESET = -1744830452;
+
 		public UdpClient(IPEndPoint endpoint) : base(endpoint)
 		{
 		}
@@ -26,6 +29,17 @@ namespace ConnectionBridge
 
 		public UdpClient(string address, int port) : base(address, port)
 		{
+		}
+
+		protected override Socket CreateSocket()
+		{
+			var socket = base.CreateSocket();
+
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+				socket.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+
+			socket.SendBufferSize = socket.ReceiveBufferSize = 135000;
+			return socket;
 		}
 
 		protected override void OnReceived(EndPoint endpoint, byte[] buffer, long offset, long size)

@@ -8,21 +8,23 @@ using System.Threading.Tasks;
 
 namespace ConnectionBridge
 {
-	internal class UdpServer : NetCoreServer.UdpServer
+	delegate void OnUdpMessageReceived(UdpMessageReceivedArgs args);
+
+	internal class UdpClient : NetCoreServer.UdpClient
 	{
 		public OnUdpMessageReceived OnUdpMessageReceived;
 
 		readonly UdpMessageReceivedArgs _Args = new();
 
-		public UdpServer(IPEndPoint endpoint) : base(endpoint)
+		public UdpClient(IPEndPoint endpoint) : base(endpoint)
 		{
 		}
 
-		public UdpServer(IPAddress address, int port) : base(address, port)
+		public UdpClient(IPAddress address, int port) : base(address, port)
 		{
 		}
 
-		public UdpServer(string address, int port) : base(address, port)
+		public UdpClient(string address, int port) : base(address, port)
 		{
 		}
 
@@ -39,6 +41,16 @@ namespace ConnectionBridge
 		protected override void OnError(SocketError error)
 		{
 			Logger.Error(() => $"Socket Error:{error}");
+		}
+
+		protected override void OnConnecting()
+		{
+			Logger.Info(() => $"Udp client connecting to {Endpoint}");
+		}
+
+		protected override void OnConnected()
+		{
+			Logger.Info(() => $"Udp client connected to {Endpoint}");
 		}
 	}
 }

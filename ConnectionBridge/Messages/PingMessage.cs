@@ -6,10 +6,13 @@ using System.Threading.Tasks;
 
 namespace ConnectionBridge.Messages
 {
-	enum MessageType
+	internal class PingMessage : BaseMessage
 	{
-		Hello = 6,
-		KeyExchange = 9,
-		Ping = 10,
+		public long Time;
+
+		public PingMessage()
+		{
+			MessageType = (byte)Messages.MessageType.Ping;
+		}
 	}
 }

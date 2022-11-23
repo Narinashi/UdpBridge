@@ -10,36 +10,36 @@ namespace ConnectionBridge
 	{
 		public static LogLevel LogLevel;
 
-		public static void Debug(string message)
+		public static void Debug(Func<string> messageFunc)
 		{
 			if (LogLevel < LogLevel.Debug)
 				return;
 
-			Console.WriteLine($"Debug: {message}");
+			Console.WriteLine($"Debug: {messageFunc()}");
 		}
 
-		public static void Info(string message)
+		public static void Info(Func<string> messageFunc)
 		{
 			if (LogLevel < LogLevel.Info)
 				return;
 
-			Console.WriteLine($"Info: {message}");
+			Console.WriteLine($"Info: {messageFunc()}");
 		}
 
-		public static void Warning(string message)
+		public static void Warning(Func<string> messageFunc)
 		{
 			if (LogLevel < LogLevel.Warning)
 				return;
 
-			Console.WriteLine($"Warning:{message}");
+			Console.WriteLine($"Warning:{messageFunc()}");
 		}
 
-		public static void Error(string message)
+		public static void Error(Func<string> messageFunc)
 		{
 			if (LogLevel < LogLevel.Error)
 				return;
 
-			Console.WriteLine($"Error: {message}");
+			Console.WriteLine($"Error: {messageFunc()}");
 		}
 	}
 

@@ -142,7 +142,7 @@ namespace ConnectionBridge
 			}
 			catch (Exception ex)
 			{
-				Logger.Error($"An exception occured in {nameof(EndSecureStreamRead)}, {ex}");
+				Logger.Error(() => $"An exception occured in {nameof(EndSecureStreamRead)}, {ex}");
 				Dispose();
 				OnClientDisconnected?.Invoke();
 				return;
@@ -173,7 +173,7 @@ namespace ConnectionBridge
 			if (sslPolicyErrors == SslPolicyErrors.RemoteCertificateChainErrors && chain.ChainStatus.FirstOrDefault().Status == X509ChainStatusFlags.UntrustedRoot)
 				return true;
 
-			Logger.Error($"Certificate error: {sslPolicyErrors}, " +
+			Logger.Error(() => $"Certificate error: {sslPolicyErrors}, " +
 				$"chain statuses:{string.Join("\r\n", chain?.ChainStatus?.Select(x=>$"{x.Status}:{x.StatusInformation}") ?? Array.Empty<string>())}");
 
 			return false;

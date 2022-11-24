@@ -36,6 +36,8 @@ namespace ConnectionBridge
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 				socket.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
 
+			socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+
 			socket.SendBufferSize = socket.ReceiveBufferSize = 135000;
 			return socket;
 		}

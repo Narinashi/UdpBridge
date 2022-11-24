@@ -42,9 +42,10 @@ namespace ConnectionBridge
 			return socket;
 		}
 
-		protected override void OnReceived(EndPoint endpoint, byte[] buffer, long offset, long size)
+		protected override void OnReceived(EndPoint endpoint, IPPacketInformation packetInfo, byte[] buffer, long offset, long size)
 		{
-			_Args.EndPoint = Endpoint;
+			_Args.EndPoint = endpoint as IPEndPoint;
+			_Args.IPPacketInformation = packetInfo;
 			_Args.Buffer = buffer;
 			_Args.Size = size;
 			_Args.Offset = offset;

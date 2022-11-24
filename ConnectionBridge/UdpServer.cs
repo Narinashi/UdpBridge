@@ -44,7 +44,7 @@ namespace ConnectionBridge
 
 		protected override void OnReceived(EndPoint endpoint, byte[] buffer, long offset, long size)
 		{
-			_Args.EndPoint = Endpoint;
+			_Args.EndPoint = endpoint as IPEndPoint;
 			_Args.Buffer = buffer;
 			_Args.Size = size;
 			_Args.Offset = offset;

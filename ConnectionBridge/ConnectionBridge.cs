@@ -140,9 +140,6 @@ namespace ConnectionBridge
 			
 			Logger.Debug(() => $"Local Message Received from {message.EndPoint}");
 
-			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4() && _ServerMode)
-				Logger.Warning(() => $"received packet from invalid peer {message.EndPoint.Address}");
-			
 			_SourceEndpoint = message.EndPoint;
 			ApplyXoR(message.Buffer, message.Offset, message.Size);
 			_RemoteUdpServer.SendAsync(message.Buffer, message.Offset, message.Size);
@@ -165,9 +162,6 @@ namespace ConnectionBridge
 			}
 
 			Logger.Debug(() => $"Remote Message Received from {message.EndPoint}");
-
-			if (message.EndPoint.Address.MapToIPv4() != _SecureChannel.PeerEndPoint.Address.MapToIPv4())
-				Logger.Warning(() => $"received packet from invalid peer {message.EndPoint.Address}");
 
 			ApplyXoR(message.Buffer, message.Offset, message.Size);
 			_LocalUdpServer.SendAsync(_SourceEndpoint, message.Buffer, message.Offset, message.Size);

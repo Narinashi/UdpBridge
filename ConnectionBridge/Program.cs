@@ -39,7 +39,7 @@ namespace ConnectionBridge
 			else if (args?.Length == 1)
 			{
 				Console.WriteLine("In order to run the program as server mode use these params");
-				Console.Write(GetHowToRunMessage(true));
+				Console.WriteLine(GetHowToRunMessage(true));
 
 				Console.WriteLine("In order to run the program as client mode use these params");
 				Console.WriteLine(GetHowToRunMessage(false));

@@ -3,7 +3,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
-
+using System.Timers;
 using ConnectionBridge.Messages;
 
 namespace ConnectionBridge
@@ -19,6 +19,8 @@ namespace ConnectionBridge
 
 		readonly MessageDeserializer _Deserializer;
 		readonly MessageSerializer _Serializer;
+
+		readonly Timer _Timer;
 
 		readonly bool _ServerMode;
 
@@ -36,11 +38,15 @@ namespace ConnectionBridge
 		byte[] _SessionIdentifierByteArray;
 		byte[] _SessionDummyByteArray;
 
+		DateTime _LatestHeartbeat;
+
 		EndPoint _SourceEndpoint;
 
 		public bool Disposed { get; private set; }
 
 		const int _MessageBufferSize = 4096;
+		const int HeartBeatInterval = 30000;
+		const int ConnectionTimeout = HeartBeatInterval * 2;
 
 		public ConnectionBridge(SecureChannel channel, string localAddress, int localPort, string remoteAddress, int remotePort, bool serverMode = false)
 		{
@@ -65,6 +71,16 @@ namespace ConnectionBridge
 
 			_LocalUdpServer.OnUdpMessageReceived = OnLocalUdpServerMessageReceived;
 			_RemoteUdpServer.OnUdpMessageReceived = OnRemoteUdpServerMessageReceived;
+
+			_LatestHeartbeat = DateTime.Now;
+
+			_Timer = new Timer 
+			{ 
+				Interval = 10000,
+			};
+
+			_Timer.Elapsed += TimerElapsed;
+			_Timer.Start();
 
 			_Deserializer.OnMessageReceived = (message) =>
 			{
@@ -102,6 +118,11 @@ namespace ConnectionBridge
 					_SessionIdentifierByteArray = _SessionIdentifier.ToByteArray();
 					_SessionKeyByteArray = _SessionKey.ToByteArray();
 				}
+				else if(message is PingMessage pingMessage)
+				{
+					Logger.Info(() => $"Ping message received from {_SecureChannel.PeerEndPoint}");
+					_LatestHeartbeat = DateTime.Now;
+				}
 			};
 		}
 
@@ -128,7 +149,6 @@ namespace ConnectionBridge
 				Key = _SessionKey,
 			});
 		}
-
 
 		private void OnLocalUdpServerMessageReceived(UdpMessageReceivedArgs message)
 		{
@@ -169,8 +189,7 @@ namespace ConnectionBridge
 			_RemoteUdpServer.ReceiveAsync();
 		}
 
-
-		void ApplyXoR(byte[] buffer, long offset, long length)
+		private void ApplyXoR(byte[] buffer, long offset, long length)
 		{
 			for (int i = 0; i + 16 < length; offset +=16, i+=16)
 			{
@@ -193,6 +212,34 @@ namespace ConnectionBridge
 			}
 		}
 
+		private async void TimerElapsed(object sender, ElapsedEventArgs e)
+		{
+			_Timer.Stop();
+			_Timer.Interval = HeartBeatInterval;
+			if (_ServerMode)
+			{
+				if (_LatestHeartbeat.AddMilliseconds(ConnectionTimeout) < DateTime.Now)
+				{
+					Logger.Info(() => $"Disconnecting peer {_SecureChannel.PeerEndPoint} since its been more than {ConnectionTimeout / 1000} seconds than the latest ping ({_LatestHeartbeat.TimeOfDay})");
+					Dispose();
+					return;
+				}
+
+				if (!IsAuthenticated)
+				{
+					Logger.Info(() => $"Disconnecting peer {_SecureChannel.PeerEndPoint} since its not authenticated in time");
+					Dispose();
+					return;
+				}
+			}
+			else
+			{
+				await _Serializer.Send(new PingMessage());
+			}
+
+			_Timer.Start();
+		}
+
 		public void Dispose()
 		{
 			if (Disposed)
@@ -201,6 +248,7 @@ namespace ConnectionBridge
 			_LocalUdpServer.Dispose();
 			_RemoteUdpServer.Dispose();
 			_SecureChannel.Dispose();
+			_Timer.Dispose();
 
 			Disposed = true;
 		}

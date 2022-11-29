@@ -82,6 +82,9 @@ namespace ConnectionBridge
 				case MessageType.KeyExchange:
 					message = new KeyExchangeMessage();
 					break;
+				case MessageType.Ping:
+					message = new PingMessage();
+					break;
 				default:
 					Logger.Warning(() => $"Invalid MessgeType:{type}, len:{length}");
 					return null;

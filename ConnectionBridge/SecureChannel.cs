@@ -48,7 +48,7 @@ namespace ConnectionBridge
 
 			var client = new TcpClient();
 			await client.ConnectAsync(address, port);
-			
+
 			var channel = new SecureChannel(client, targetHostMachineName, bufferSize);
 			await channel.Authenticate();
 
@@ -97,15 +97,37 @@ namespace ConnectionBridge
 											);
 		}
 
-		public async Task Authenticate()
+		public async Task<bool> Authenticate()
 		{
 			if (!_Client.Connected)
 				throw new InvalidOperationException("Client is disconnected");
 
-			if (_Server)
-				await _SecureStream.AuthenticateAsServerAsync(_Certificate, false, SslProtocols.Tls12 | SslProtocols.Tls11, false);
-			else
-				await _SecureStream.AuthenticateAsClientAsync(_TargetHostMachineName, null, SslProtocols.Tls12 | SslProtocols.Tls11, true);
+			try
+			{
+				if (_Server)
+					await _SecureStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+					{
+						ServerCertificate = _Certificate,
+						EncryptionPolicy = EncryptionPolicy.AllowNoEncryption,
+						EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls11,
+					}, (new CancellationTokenSource(10000).Token));
+				else
+					await _SecureStream.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+					{
+						EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls11,
+						TargetHost = _TargetHostMachineName,
+						RemoteCertificateValidationCallback = ValidateServerCertificate,
+						EncryptionPolicy = EncryptionPolicy.AllowNoEncryption,
+					}, (new CancellationTokenSource(10000).Token));
+
+				return true;
+			}
+			catch (OperationCanceledException)
+			{
+				Dispose();
+				OnClientDisconnected?.Invoke();
+				return false;
+			}
 		}
 
 		public async Task Send(byte[] buffer)
@@ -116,7 +138,7 @@ namespace ConnectionBridge
 			{
 				await _SecureStream.WriteAsync(buffer, 0, buffer.Length, _CancelationToken.Token);
 			}
-			catch(ObjectDisposedException)
+			catch (ObjectDisposedException)
 			{
 				OnClientDisconnected?.Invoke();
 				throw;
@@ -174,7 +196,7 @@ namespace ConnectionBridge
 				return true;
 
 			Logger.Error(() => $"Certificate error: {sslPolicyErrors}, " +
-				$"chain statuses:{string.Join("\r\n", chain?.ChainStatus?.Select(x=>$"{x.Status}:{x.StatusInformation}") ?? Array.Empty<string>())}");
+				$"chain statuses:{string.Join("\r\n", chain?.ChainStatus?.Select(x => $"{x.Status}:{x.StatusInformation}") ?? Array.Empty<string>())}");
 
 			return false;
 		}

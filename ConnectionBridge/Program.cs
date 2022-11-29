@@ -64,22 +64,18 @@ namespace ConnectionBridge
 				}
 				else
 				{
-					//await StartClientMode(PromptStringParameter("sslServerAddress"),
-					//						PromptIntParameter("sslServerPort"),
-					//						PromptStringParameter("trustedHostName"),
-					//						PromptStringParameter("udpServerLocalAddress"),
-					//						PromptIntParameter("udpServerLocalPort"),
-					//						PromptStringParameter("udpServerRemoteAddress"),
-					//						PromptIntParameter("udpServerRemotePort")
-					//						);
-
-					await StartClientMode("51.75.68.16", 42069, "WrexUwU", "127.0.0.1", 1111, "51.75.68.16", 39911);
-
+					await StartClientMode(PromptStringParameter("sslServerAddress"),
+											PromptIntParameter("sslServerPort"),
+											PromptStringParameter("trustedHostName"),
+											PromptStringParameter("udpServerLocalAddress"),
+											PromptIntParameter("udpServerLocalPort"),
+											PromptStringParameter("udpServerRemoteAddress"),
+											PromptIntParameter("udpServerRemotePort")
+											);
 				}
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}
 		}
-
 
 		static async Task StartClientMode(string sslServerAddress,
 											int sslServerPort,
@@ -121,9 +117,6 @@ namespace ConnectionBridge
 			}
 		}
 
-
-
-
 		static async Task StartServerMode(string sslCertificateFileAddress,
 										string sslCertificatePassword,
 										int sslServerListeningPort,
@@ -158,62 +151,26 @@ namespace ConnectionBridge
 					}
 
 					SecureChannel secureChannel = new(client, cert, 4096);
-					Task authenticationTask = secureChannel.Authenticate();
 
-					ConnectionBridge connectionBridge = new(secureChannel,
-																udpServerLocalAddress,
-																udpServerLocalPort,
-																udpServerRemoteAddress,
-																udpServerRemotePort, true);
-					secureChannel.OnClientDisconnected = () =>
+					if (await secureChannel.Authenticate())
 					{
-						var bridge = connectionBridge;
-						var channel = secureChannel;
+						secureChannel.StartReceiving();
 
-						Logger.Debug(() => $"Connection {channel.PeerEndPoint} has been disconnected");
+						ConnectionBridge connectionBridge = new(secureChannel,
+																	udpServerLocalAddress,
+																	udpServerLocalPort,
+																	udpServerRemoteAddress,
+																	udpServerRemotePort, true);
 
-						bridge.Dispose();
-					};
+						_ConnectionBridge = connectionBridge;
 
-					_ = Task.Run(async () =>
-					{
-						var bridge = connectionBridge;
-						var channel = secureChannel;
-
-						Logger.Debug(() => $"Awaiting authentication for {channel.PeerEndPoint}");
-						if ((await Task.WhenAny(Task.Delay(AuthenticationTimeout), authenticationTask)) != authenticationTask)
+						secureChannel.OnClientDisconnected = () => 
 						{
-							Logger.Debug(() => $"SSL authentication failed for {channel.PeerEndPoint}");
-
-							bridge.Dispose();
-
-							return;
-						}
-
-						Logger.Debug(() => $"authentication succeded for {channel.PeerEndPoint}");
-
-						channel.StartReceiving();
-
-						await Task.Delay(AuthenticationTimeout);
-
-						if (!bridge.IsAuthenticated)
-						{
-							Logger.Debug(() => $"authentication failed for {channel.PeerEndPoint}");
-
-							bridge.Dispose();
-
-							return;
-						}
-
-						_ConnectionBridge = bridge;
-						channel.OnClientDisconnected = () =>
-						{
-							Logger.Debug(() => $"Connection {channel.PeerEndPoint} has been disconnected, disposing secure channel and awaiting new connection");
-
+							Logger.Info(() => $"A connected client has disconnected, going to accept new client");
 							_ConnectionBridge.Dispose();
 							_ConnectionBridge = null;
 						};
-					});
+					}
 				}
 				catch (Exception ex)
 				{
@@ -221,7 +178,6 @@ namespace ConnectionBridge
 				}
 			}
 		}
-
 
 		static string GetHowToRunMessage(bool serverMode)
 		{

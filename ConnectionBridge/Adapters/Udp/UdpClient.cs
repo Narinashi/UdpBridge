@@ -7,15 +7,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ConnectionBridge
+namespace ConnectionBridge.Adapters.Udp
 {
-	delegate void OnUdpMessageReceived(UdpMessageReceivedArgs args);
-
 	internal class UdpClient : NetCoreServer.UdpClient
 	{
-		public OnUdpMessageReceived OnUdpMessageReceived;
+		public OnMessageReceived OnMessageReceived { set; get; }
 
-		readonly UdpMessageReceivedArgs _Args = new();
+		readonly MessageReceivedArgs _Args = new();
 
 		const int SIO_UDP_CONNRESET = -1744830452;
 
@@ -40,7 +38,7 @@ namespace ConnectionBridge
 
 			socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
 
-			socket.SendBufferSize = socket.ReceiveBufferSize = 135000;
+			socket.SendBufferSize = socket.ReceiveBufferSize = 13500000;
 			return socket;
 		}
 
@@ -51,7 +49,7 @@ namespace ConnectionBridge
 			_Args.Size = size;
 			_Args.Offset = offset;
 
-			OnUdpMessageReceived?.Invoke(_Args);
+			OnMessageReceived?.Invoke(_Args);
 		}
 
 		protected override void OnError(SocketError error)

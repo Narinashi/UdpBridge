@@ -4,7 +4,9 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using System.Timers;
+using ConnectionBridge.Adapters;
 using ConnectionBridge.Messages;
+using ConnectionBridge.Obfuscators;
 
 namespace ConnectionBridge
 {
@@ -12,13 +14,15 @@ namespace ConnectionBridge
 	{
 		public bool IsAuthenticated { get; private set; }
 
-		readonly UdpServer _LocalUdpServer;
-		readonly UdpClient _RemoteUdpServer;
+		readonly IServerAdapter _LocalAdapter;
+		readonly IClientAdapter _RemoteAdapter;
 
 		readonly SecureChannel _SecureChannel;
 
 		readonly MessageDeserializer _Deserializer;
 		readonly MessageSerializer _Serializer;
+
+		readonly IObfucator _Obfuscator;
 
 		readonly Timer _Timer;
 
@@ -66,16 +70,21 @@ namespace ConnectionBridge
 			_RemoteUdpServerAddress = remoteAddress;
 			_RemoteUdpServerPort = remotePort;
 
-			_LocalUdpServer = new UdpServer(_LocalUdpServerAddress, _LocalUdpServerPort);
-			_RemoteUdpServer = new UdpClient(_RemoteUdpServerAddress, _RemoteUdpServerPort);
+			_LocalAdapter = new Adapters.Udp.UdpServerAdapter();
+			_LocalAdapter.Initialize(_LocalUdpServerAddress, _LocalUdpServerPort);
 
-			_LocalUdpServer.OnUdpMessageReceived = OnLocalUdpServerMessageReceived;
-			_RemoteUdpServer.OnUdpMessageReceived = OnRemoteUdpServerMessageReceived;
+			_RemoteAdapter = new Adapters.Udp.UdpClientAdapter();
+			_RemoteAdapter.Initialize(_RemoteUdpServerAddress, _RemoteUdpServerPort);
+
+			_LocalAdapter.OnMessageReceived = OnLocalAdapterMessageReceived;
+			_RemoteAdapter.OnMessageReceived = OnRemoteAdapterMessageReceived;
+
+			_Obfuscator = new Xor16BytesObfuscator();
 
 			_LatestHeartbeat = DateTime.Now;
 
-			_Timer = new Timer 
-			{ 
+			_Timer = new Timer
+			{
 				Interval = 10000,
 			};
 
@@ -96,11 +105,11 @@ namespace ConnectionBridge
 
 					IsAuthenticated = true;
 
-					_LocalUdpServer.Start();
-					_RemoteUdpServer.Connect();
+					_LocalAdapter.Start();
+					_RemoteAdapter.Connect();
 
-					_LocalUdpServer.ReceiveAsync();
-					_RemoteUdpServer.ReceiveAsync();
+					_LocalAdapter.ReceiveAsync();
+					_RemoteAdapter.ReceiveAsync();
 				}
 				else if (message is KeyExchangeMessage keyExchange)
 				{
@@ -118,7 +127,7 @@ namespace ConnectionBridge
 					_SessionIdentifierByteArray = _SessionIdentifier.ToByteArray();
 					_SessionKeyByteArray = _SessionKey.ToByteArray();
 				}
-				else if(message is PingMessage pingMessage)
+				else if (message is PingMessage pingMessage)
 				{
 					Logger.Info(() => $"Ping message received from {_SecureChannel.PeerEndPoint}");
 					_LatestHeartbeat = DateTime.Now;
@@ -150,24 +159,41 @@ namespace ConnectionBridge
 			});
 		}
 
-		private void OnLocalUdpServerMessageReceived(UdpMessageReceivedArgs message)
+		private void OnLocalAdapterMessageReceived(MessageReceivedArgs message)
 		{
 			if (_SessionIdentifierByteArray == null)
 			{
 				Logger.Error(() => $"{(_ServerMode ? "Server: " : "Client: ")}Received message from local while session identifier is null, EP:{message.EndPoint}");
 				return;
 			}
-			
+
 			Logger.Debug(() => $"Local Message Received from {message.EndPoint}");
 
 			_SourceEndpoint = message.EndPoint;
-			ApplyXoR(message.Buffer, message.Offset, message.Size);
-			_RemoteUdpServer.SendAsync(message.Buffer, message.Offset, message.Size);
 
-			_LocalUdpServer.ReceiveAsync();
+			var backupMessage = new MessageReceivedArgs(message);
+
+			message = _ServerMode ? 
+				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray) :
+				_Obfuscator.Obfuscate(message, _SessionKeyByteArray);
+
+			var secondBackupMessaeg = new MessageReceivedArgs(message);
+
+			secondBackupMessaeg = !_ServerMode ?
+				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray) :
+				_Obfuscator.Obfuscate(message, _SessionKeyByteArray);
+
+			if (!secondBackupMessaeg.Buffer.SequenceEqual(backupMessage.Buffer))
+			{
+
+			}
+
+			_RemoteAdapter.Send(message.Buffer, message.Offset, message.Size);
+
+			_LocalAdapter.ReceiveAsync();
 		}
 
-		private void OnRemoteUdpServerMessageReceived(UdpMessageReceivedArgs message)
+		private void OnRemoteAdapterMessageReceived(MessageReceivedArgs message)
 		{
 			if (_SessionIdentifierByteArray == null)
 			{
@@ -175,7 +201,7 @@ namespace ConnectionBridge
 				return;
 			}
 
-			if(_SourceEndpoint == null)
+			if (_SourceEndpoint == null)
 			{
 				Logger.Warning(() => $"Source endpoint is null");
 				return;
@@ -183,33 +209,14 @@ namespace ConnectionBridge
 
 			Logger.Debug(() => $"Remote Message Received from {message.EndPoint}");
 
-			ApplyXoR(message.Buffer, message.Offset, message.Size);
-			_LocalUdpServer.SendAsync(_SourceEndpoint, message.Buffer, message.Offset, message.Size);
 
-			_RemoteUdpServer.ReceiveAsync();
-		}
+			message = _ServerMode ?
+				_Obfuscator.Obfuscate(message, _SessionKeyByteArray) :
+				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray);
 
-		private void ApplyXoR(byte[] buffer, long offset, long length)
-		{
-			for (int i = 0; i + 16 < length; offset +=16, i+=16)
-			{
-				buffer[offset + 0] ^= _SessionKeyByteArray[0];
-				buffer[offset + 1] ^= _SessionKeyByteArray[1];
-				buffer[offset + 2] ^= _SessionKeyByteArray[2];
-				buffer[offset + 3] ^= _SessionKeyByteArray[3];
-				buffer[offset + 4] ^= _SessionKeyByteArray[4];
-				buffer[offset + 5] ^= _SessionKeyByteArray[5];
-				buffer[offset + 6] ^= _SessionKeyByteArray[6];
-				buffer[offset + 7] ^= _SessionKeyByteArray[7];
-				buffer[offset + 8] ^= _SessionKeyByteArray[8];
-				buffer[offset + 9] ^= _SessionKeyByteArray[9];
-				buffer[offset + 10] ^= _SessionKeyByteArray[10];
-				buffer[offset + 11] ^= _SessionKeyByteArray[11];
-				buffer[offset + 12] ^= _SessionKeyByteArray[12];
-				buffer[offset + 13] ^= _SessionKeyByteArray[13];
-				buffer[offset + 14] ^= _SessionKeyByteArray[14];
-				buffer[offset + 15] ^= _SessionKeyByteArray[15];
-			}
+			_LocalAdapter.Send(_SourceEndpoint, message.Buffer, message.Offset, message.Size);
+
+			_RemoteAdapter.ReceiveAsync();
 		}
 
 		private async void TimerElapsed(object sender, ElapsedEventArgs e)
@@ -245,8 +252,8 @@ namespace ConnectionBridge
 			if (Disposed)
 				return;
 
-			_LocalUdpServer.Dispose();
-			_RemoteUdpServer.Dispose();
+			_LocalAdapter.Dispose();
+			_RemoteAdapter.Dispose();
 			_SecureChannel.Dispose();
 			_Timer.Dispose();
 

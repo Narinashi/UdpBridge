@@ -7,8 +7,21 @@ using System.Threading.Tasks;
 
 namespace ConnectionBridge
 {
-	class UdpMessageReceivedArgs 
+	class MessageReceivedArgs 
 	{
+		public MessageReceivedArgs(MessageReceivedArgs arg)
+		{
+			Buffer = arg.Buffer.ToArray();
+			Offset = arg.Offset;
+			Size = arg.Size;
+			EndPoint = arg.EndPoint;
+		}
+
+		public MessageReceivedArgs()
+		{
+
+		}
+
 		public byte[] Buffer;
 		public long Offset;
 		public long Size;

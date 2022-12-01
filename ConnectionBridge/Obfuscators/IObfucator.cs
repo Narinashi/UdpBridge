@@ -8,8 +8,8 @@ namespace ConnectionBridge
 {
 	interface IObfucator
 	{
-		MessageReceivedArgs Obfuscate(MessageReceivedArgs message, byte[] key);
+		MessageReceivedArgs Obfuscate(MessageReceivedArgs message, byte[] key, bool serverMode);
 
-		MessageReceivedArgs Deobfuscate(MessageReceivedArgs message, byte[] key);
+		MessageReceivedArgs Deobfuscate(MessageReceivedArgs message, byte[] key, bool serverMode);
 	}
 }

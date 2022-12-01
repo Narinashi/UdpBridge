@@ -8,12 +8,12 @@ namespace ConnectionBridge.Obfuscators
 {
 	class Xor16BytesObfuscator : IObfucator
 	{
-		public MessageReceivedArgs Deobfuscate(MessageReceivedArgs message, byte[] key)
+		public MessageReceivedArgs Deobfuscate(MessageReceivedArgs message, byte[] key, bool serverMode)
 		{
-			return Obfuscate(message, key);
+			return Obfuscate(message, key, serverMode);
 		}
 
-		public MessageReceivedArgs Obfuscate(MessageReceivedArgs message, byte[] key)
+		public MessageReceivedArgs Obfuscate(MessageReceivedArgs message, byte[] key, bool serverMode)
 		{
 			if (message == null)
 				throw new ArgumentNullException(nameof(message));

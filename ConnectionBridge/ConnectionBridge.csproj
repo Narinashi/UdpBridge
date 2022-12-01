@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="NetCoreServer" Version="5.1.0" />
+    <PackageReference Include="SharpPcap" Version="6.2.5" />
   </ItemGroup>
 
 </Project>

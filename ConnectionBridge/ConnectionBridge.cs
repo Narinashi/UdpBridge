@@ -79,7 +79,7 @@ namespace ConnectionBridge
 			_LocalAdapter.OnMessageReceived = OnLocalAdapterMessageReceived;
 			_RemoteAdapter.OnMessageReceived = OnRemoteAdapterMessageReceived;
 
-			_Obfuscator = new Xor16BytesObfuscator();
+			_Obfuscator = new DnsObfuscator();
 
 			_LatestHeartbeat = DateTime.Now;
 
@@ -171,22 +171,9 @@ namespace ConnectionBridge
 
 			_SourceEndpoint = message.EndPoint;
 
-			var backupMessage = new MessageReceivedArgs(message);
-
 			message = _ServerMode ? 
-				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray) :
-				_Obfuscator.Obfuscate(message, _SessionKeyByteArray);
-
-			var secondBackupMessaeg = new MessageReceivedArgs(message);
-
-			secondBackupMessaeg = !_ServerMode ?
-				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray) :
-				_Obfuscator.Obfuscate(message, _SessionKeyByteArray);
-
-			if (!secondBackupMessaeg.Buffer.SequenceEqual(backupMessage.Buffer))
-			{
-
-			}
+				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray, _ServerMode) :
+				_Obfuscator.Obfuscate(message, _SessionKeyByteArray, _ServerMode);
 
 			_RemoteAdapter.Send(message.Buffer, message.Offset, message.Size);
 
@@ -211,8 +198,8 @@ namespace ConnectionBridge
 
 
 			message = _ServerMode ?
-				_Obfuscator.Obfuscate(message, _SessionKeyByteArray) :
-				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray);
+				_Obfuscator.Obfuscate(message, _SessionKeyByteArray, _ServerMode) :
+				_Obfuscator.Deobfuscate(message, _SessionKeyByteArray, _ServerMode);
 
 			_LocalAdapter.Send(_SourceEndpoint, message.Buffer, message.Offset, message.Size);
 

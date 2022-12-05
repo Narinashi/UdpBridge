@@ -1,8 +1,11 @@
+using SharpPcap;
+using SharpPcap.LibPcap;
 using System;
 using System.Linq;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace ConnectionBridge
@@ -14,7 +17,42 @@ namespace ConnectionBridge
 
 		const int AuthenticationTimeout = 10000;
 
-		static async Task Main(string[] args)
+		static void Main(string[] args)
+		{
+			var rawClient = new Adapters.Raw.RawClientAdapter();
+			var rawServer = new Adapters.Raw.RawServerAdapter();
+
+			rawClient.Initialize("127.0.0.1", 1111);
+			rawServer.Initialize("127.0.0.1", 2222);
+			
+			rawServer.Start();
+			rawClient.Connect();
+
+			var buffer = Encoding.ASCII.GetBytes("Hello!");
+
+			rawClient.OnMessageReceived = (arg) => 
+			{
+				Console.Write($"Client received packet, {arg.Size}");
+				rawClient.Send(buffer, 0, buffer.Length);
+			};
+
+			rawServer.OnMessageReceived = (arg) => 
+			{
+				Console.WriteLine($"Server received packet, {arg.Size}");
+				rawServer.Send(arg.EndPoint, buffer, 0, buffer.Length);
+			};
+
+			rawClient.ReceiveAsync();
+			rawClient.ReceiveAsync();
+
+
+			rawClient.Send(buffer, 0, buffer.Length);
+
+			Console.Write("Press enter to exit ...");
+			Console.ReadLine();
+		}
+
+		static async Task Main1(string[] args)
 		{
 			if (args?.Length > 1)
 			{
@@ -64,14 +102,19 @@ namespace ConnectionBridge
 				}
 				else
 				{
-					await StartClientMode(PromptStringParameter("sslServerAddress"),
-											PromptIntParameter("sslServerPort"),
-											PromptStringParameter("trustedHostName"),
-											PromptStringParameter("udpServerLocalAddress"),
-											PromptIntParameter("udpServerLocalPort"),
-											PromptStringParameter("udpServerRemoteAddress"),
-											PromptIntParameter("udpServerRemotePort")
-											);
+					//await StartClientMode(PromptStringParameter("sslServerAddress"),
+					//						PromptIntParameter("sslServerPort"),
+					//						PromptStringParameter("trustedHostName"),
+					//						PromptStringParameter("udpServerLocalAddress"),
+					//						PromptIntParameter("udpServerLocalPort"),
+					//						PromptStringParameter("udpServerRemoteAddress"),
+					//						PromptIntParameter("udpServerRemotePort")
+					//						);
+					
+					//await StartClientMode("51.75.68.16", 42069, "WrexUwU", "127.0.0.1", 1111, "51.75.68.16", 39911);
+					
+					await StartClientMode("159.69.45.213", 8554, "WrexUwU", "127.0.0.1", 1111, "159.69.45.213", 53);
+
 				}
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}

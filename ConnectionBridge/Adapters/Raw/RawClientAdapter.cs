@@ -1,9 +1,14 @@
-﻿using System;
+﻿using SharpPcap;
+using SharpPcap.LibPcap;
+using PacketDotNet;
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using System.Net.NetworkInformation;
 
 namespace ConnectionBridge.Adapters.Raw
 {
@@ -23,6 +28,12 @@ namespace ConnectionBridge.Adapters.Raw
 
 		OnMessageReceived _OnUdpMessageReceived;
 		RawClient _Client;
+		LibPcapLiveDevice _Device;
+
+		ARP _Arp;
+		PhysicalAddress _TargetPhysicalAddress;
+
+		IPEndPoint _Endpoint;
 
 		public void Connect()
 		{
@@ -32,28 +43,61 @@ namespace ConnectionBridge.Adapters.Raw
 			_Client.Connect();
 		}
 
-		public void Initialize(string address, int port)
+		public void Initialize(string address, ushort port)
 		{
+			_Endpoint = new IPEndPoint(IPAddress.Parse(address), port);
 			_Client = new RawClient(address, port)
 			{
 				OnMessageReceived = _OnUdpMessageReceived
 			};
+
+			var devices = CaptureDeviceList.Instance;
+
+			_Device = devices
+						.Where(x => x.MacAddress != null)
+						.FirstOrDefault(x => x is LibPcapLiveDevice liveDevice && liveDevice.Interface.GatewayAddresses.Any()) as LibPcapLiveDevice;
+			
+			if (_Device == null)
+				throw new InvalidOperationException("No valid device found");
+			
+			_Device.Open();
+
+			_Arp = new ARP(_Device);
+
+			Logger.Info(() => $"Client selected device: {_Device.Name} {_Device.Description}");
 		}
 
 		public void Send(byte[] buffer, long offset, long length)
 		{
-			if (_Client == null)
+			if (_Client == null || _Device == null)
 				throw new InvalidOperationException("Raw client hasnt been initialized yet");
 
-			_Client.Send(buffer, offset, length);
+			Send(_Endpoint, buffer, offset, length);
 		}
 
-		public void Send(EndPoint endpoint, byte[] buffer, long offset, long length)
+		public void Send(IPEndPoint endpoint, byte[] buffer, long offset, long length)
 		{
-			if (_Client == null)
+			if (_Client == null || _Device == null)
 				throw new InvalidOperationException("Raw client hasnt been initialized yet");
 
-			_Client.Send(endpoint, buffer, offset, length);
+			if (_TargetPhysicalAddress == null)
+				FindTargetPhysicalAddress();
+			
+			EthernetPacket ethernetPacket = new(_Device.MacAddress, _TargetPhysicalAddress, EthernetType.IPv4);
+			IPv4Packet ipPacket = new(_Client.Endpoint.Address, endpoint.Address);
+			TcpPacket tcpPacket = new((ushort)_Client.Endpoint.Port, (ushort)endpoint.Port);
+
+			tcpPacket.PayloadDataSegment = new PacketDotNet.Utils.ByteArraySegment(buffer, (int)offset, (int)length);
+
+			ipPacket.PayloadPacket = tcpPacket;
+			ethernetPacket.ParentPacket = ipPacket;
+
+			_Device.SendPacket(ethernetPacket);
+		}
+
+		private PhysicalAddress FindTargetPhysicalAddress()
+		{
+			return _TargetPhysicalAddress = _Arp.Resolve(_Device.Interface.GatewayAddresses[0]);
 		}
 
 		public void ReceiveAsync()
@@ -67,6 +111,7 @@ namespace ConnectionBridge.Adapters.Raw
 		public void Dispose()
 		{
 			_Client?.Dispose();
+			_Device?.Dispose();
 		}
 	}
 }

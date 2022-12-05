@@ -11,7 +11,7 @@ namespace ConnectionBridge.Adapters
 
 	interface IAdapter : IDisposable
 	{
-		void Initialize(string address, int port);
+		void Initialize(string address, ushort port);
 		OnMessageReceived OnMessageReceived { get; set; }
 
 		void ReceiveAsync();
@@ -21,13 +21,13 @@ namespace ConnectionBridge.Adapters
 	{
 		void Connect();
 		void Send(byte[] buffer, long offset, long length);
-		void Send(EndPoint endpoint, byte[] buffer, long offset, long length);
+		void Send(IPEndPoint endpoint, byte[] buffer, long offset, long length);
 	}
 
 	interface IServerAdapter : IAdapter
 	{
 		void Start();
 		void Send(byte[] buffer, long offset, long length);
-		void Send(EndPoint endpoint, byte[] buffer, long offset, long length);
+		void Send(IPEndPoint endpoint, byte[] buffer, long offset, long length);
 	}
 }

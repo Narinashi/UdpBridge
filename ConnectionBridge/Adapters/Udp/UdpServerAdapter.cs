@@ -24,7 +24,7 @@ namespace ConnectionBridge.Adapters.Udp
 		OnMessageReceived _OnUdpMessageReceived;
 		UdpServer _UdpServer;
 
-		public void Initialize(string address, int port)
+		public void Initialize(string address, ushort port)
 		{
 			_UdpServer = new UdpServer(address, port);
 		}
@@ -45,7 +45,7 @@ namespace ConnectionBridge.Adapters.Udp
 			_UdpServer.Send(buffer, offset, length);
 		}
 
-		public void Send(EndPoint endpoint, byte[] buffer, long offset, long length)
+		public void Send(IPEndPoint endpoint, byte[] buffer, long offset, long length)
 		{
 			if (_UdpServer == null)
 				throw new InvalidOperationException("Udp server hasnt been initialized yet");

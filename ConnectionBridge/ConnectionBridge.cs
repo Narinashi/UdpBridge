@@ -44,7 +44,7 @@ namespace ConnectionBridge
 
 		DateTime _LatestHeartbeat;
 
-		EndPoint _SourceEndpoint;
+		IPEndPoint _SourceEndpoint;
 
 		public bool Disposed { get; private set; }
 
@@ -70,11 +70,11 @@ namespace ConnectionBridge
 			_RemoteUdpServerAddress = remoteAddress;
 			_RemoteUdpServerPort = remotePort;
 
-			_LocalAdapter = new Adapters.Udp.UdpServerAdapter();
-			_LocalAdapter.Initialize(_LocalUdpServerAddress, _LocalUdpServerPort);
+			_LocalAdapter = _ServerMode ? new Adapters.Raw.RawServerAdapter() : new Adapters.Udp.UdpServerAdapter();
+			_LocalAdapter.Initialize(_LocalUdpServerAddress, (ushort)_LocalUdpServerPort);
 
-			_RemoteAdapter = new Adapters.Udp.UdpClientAdapter();
-			_RemoteAdapter.Initialize(_RemoteUdpServerAddress, _RemoteUdpServerPort);
+			_RemoteAdapter = _ServerMode ? new Adapters.Udp.UdpClientAdapter() : new Adapters.Raw.RawClientAdapter();
+			_RemoteAdapter.Initialize(_RemoteUdpServerAddress, (ushort)_RemoteUdpServerPort);
 
 			_LocalAdapter.OnMessageReceived = OnLocalAdapterMessageReceived;
 			_RemoteAdapter.OnMessageReceived = OnRemoteAdapterMessageReceived;

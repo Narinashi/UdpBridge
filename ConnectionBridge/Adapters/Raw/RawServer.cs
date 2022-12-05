@@ -31,7 +31,7 @@ namespace ConnectionBridge.Adapters.Raw
 
 		protected override Socket CreateSocket()
 		{
-			var socket = base.CreateSocket();
+			var socket = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Raw);
 
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 				socket.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);

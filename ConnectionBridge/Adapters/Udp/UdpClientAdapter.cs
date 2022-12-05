@@ -32,7 +32,7 @@ namespace ConnectionBridge.Adapters.Udp
 			_Client.Connect();
 		}
 
-		public void Initialize(string address, int port)
+		public void Initialize(string address, ushort port)
 		{
 			_Client = new UdpClient(address, port)
 			{
@@ -48,7 +48,7 @@ namespace ConnectionBridge.Adapters.Udp
 			_Client.SendAsync(buffer, offset, length);
 		}
 
-		public void Send(EndPoint endpoint, byte[] buffer, long offset, long length)
+		public void Send(IPEndPoint endpoint, byte[] buffer, long offset, long length)
 		{
 			if (_Client == null)
 				throw new InvalidOperationException("Udp client hasnt been initialized yet");

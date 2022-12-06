@@ -23,6 +23,7 @@ namespace ConnectionBridge.Adapters.Raw
 		LibPcapLiveDevice _Device;
 		
 		PhysicalAddress _TargetPhysicalAddress;
+		IPEndPoint _Endpoint;
 
 		public void Initialize(string address, ushort port)
 		{
@@ -30,6 +31,8 @@ namespace ConnectionBridge.Adapters.Raw
 			{
 				OnMessageReceived = OnRawMessageReceived
 			};
+
+			_Endpoint = new IPEndPoint(IPAddress.Parse(address), port);
 
 			var devices = CaptureDeviceList.Instance;
 
@@ -68,13 +71,13 @@ namespace ConnectionBridge.Adapters.Raw
 				FindTargetPhysicalAddress();
 
 			EthernetPacket ethernetPacket = new(_Device.MacAddress, _TargetPhysicalAddress, EthernetType.IPv4);
-			IPv4Packet ipPacket = new(_RawServer.Endpoint.Address, endpoint.Address);
-			TcpPacket tcpPacket = new((ushort)_RawServer.Endpoint.Port, (ushort)endpoint.Port);
+			IPv4Packet ipPacket = new(_Endpoint.Address, endpoint.Address);
+			TcpPacket tcpPacket = new((ushort)_Endpoint.Port, (ushort)endpoint.Port);
 
-			tcpPacket.PayloadDataSegment = new PacketDotNet.Utils.ByteArraySegment(buffer, (int)offset, (int)length);
+			tcpPacket.PayloadDataSegment = new ByteArraySegment(buffer, (int)offset, (int)length);
 
 			ipPacket.PayloadPacket = tcpPacket;
-			ethernetPacket.ParentPacket = ipPacket;
+			ethernetPacket.PayloadPacket = ipPacket;
 
 			_Device.SendPacket(ethernetPacket);
 		}
@@ -125,6 +128,9 @@ namespace ConnectionBridge.Adapters.Raw
 
 			OnMessageReceived(args);
 		}
+
+
+
 
 		public void Dispose()
 		{

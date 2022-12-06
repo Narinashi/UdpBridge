@@ -22,8 +22,8 @@ namespace ConnectionBridge
 			var rawClient = new Adapters.Raw.RawClientAdapter();
 			var rawServer = new Adapters.Raw.RawServerAdapter();
 
-			rawClient.Initialize("127.0.0.1", 1111);
-			rawServer.Initialize("127.0.0.1", 2222);
+			rawClient.Initialize("192.168.1.102", 2222);
+			rawServer.Initialize("192.168.1.102", 2222);
 			
 			rawServer.Start();
 			rawClient.Connect();
@@ -45,11 +45,13 @@ namespace ConnectionBridge
 			rawClient.ReceiveAsync();
 			rawClient.ReceiveAsync();
 
+			while (true)
+			{
+				rawClient.Send(buffer, 0, buffer.Length);
 
-			rawClient.Send(buffer, 0, buffer.Length);
-
-			Console.Write("Press enter to exit ...");
-			Console.ReadLine();
+				Console.Write("Press enter to repeat ...");
+				Console.ReadLine();
+			}
 		}
 
 		static async Task Main1(string[] args)

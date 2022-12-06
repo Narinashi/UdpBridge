@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace ConnectionBridge.Adapters.Raw
 {
-	internal class RawClient : NetCoreServer.UdpClient
+	internal class RawClient : UdpClient
 	{
 		public OnMessageReceived OnMessageReceived { set; get; }
 
@@ -42,14 +42,80 @@ namespace ConnectionBridge.Adapters.Raw
 			return socket;
 		}
 
-		protected override void OnReceived(EndPoint endpoint, byte[] buffer, long offset, long size)
+		protected void OnReceived(EndPoint endpoint, IPPacketInformation packetInfo, byte[] buffer, long offset, long size)
 		{
 			_Args.EndPoint = endpoint as IPEndPoint;
 			_Args.Buffer = buffer;
 			_Args.Size = size;
 			_Args.Offset = offset;
+			_Args.PacketInformation = packetInfo;
 
 			OnMessageReceived?.Invoke(_Args);
+		}
+
+		public override void ReceiveAsync()
+		{
+			TryLowerLevelReceive();
+		}
+
+		private void TryLowerLevelReceive()
+		{
+			if (_receiving)
+				return;
+
+			if (!IsConnected)
+				return;
+
+			try
+			{
+				// Async receive with the receive handler
+				_receiving = true;
+				_receiveEventArg.RemoteEndPoint = _receiveEndpoint;
+				_receiveEventArg.SetBuffer(_receiveBuffer.Data, 0, (int)_receiveBuffer.Capacity);
+				if (!Socket.ReceiveMessageFromAsync(_receiveEventArg))
+					ProcessReceiveFrom(_receiveEventArg);
+			}
+			catch (ObjectDisposedException) { }
+		}
+
+		protected override void ProcessReceiveFrom(SocketAsyncEventArgs e)
+		{
+			_receiving = false;
+
+			if (!IsConnected)
+				return;
+
+			// Disconnect on error
+			if (e.SocketError != SocketError.Success)
+			{
+				SendError(e.SocketError);
+				Disconnect();
+				return;
+			}
+
+			// Received some data from the server
+			long size = e.BytesTransferred;
+
+			// Update statistic
+			DatagramsReceived++;
+			BytesReceived += size;
+
+			// Call the datagram received handler
+			OnReceived(e.RemoteEndPoint, e.ReceiveMessageFromPacketInfo, _receiveBuffer.Data, 0, size);
+
+			// If the receive buffer is full increase its size
+			if (_receiveBuffer.Capacity == size)
+			{
+				// Check the receive buffer limit
+				if (((2 * size) > OptionReceiveBufferLimit) && (OptionReceiveBufferLimit > 0))
+				{
+					SendError(SocketError.NoBufferSpaceAvailable);
+					Disconnect();
+					return;
+				}
+
+				_receiveBuffer.Reserve(2 * size);
+			}
 		}
 
 		protected override void OnError(SocketError error)

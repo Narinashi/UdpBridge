@@ -84,13 +84,13 @@ namespace ConnectionBridge.Adapters.Raw
 				FindTargetPhysicalAddress();
 			
 			EthernetPacket ethernetPacket = new(_Device.MacAddress, _TargetPhysicalAddress, EthernetType.IPv4);
-			IPv4Packet ipPacket = new(_Client.Endpoint.Address, endpoint.Address);
-			TcpPacket tcpPacket = new((ushort)_Client.Endpoint.Port, (ushort)endpoint.Port);
+			IPv4Packet ipPacket = new((_Client.Endpoint as IPEndPoint).Address, endpoint.Address);
+			TcpPacket tcpPacket = new((ushort)(_Client.Endpoint as IPEndPoint).Port, (ushort)endpoint.Port);
 
 			tcpPacket.PayloadDataSegment = new PacketDotNet.Utils.ByteArraySegment(buffer, (int)offset, (int)length);
 
 			ipPacket.PayloadPacket = tcpPacket;
-			ethernetPacket.ParentPacket = ipPacket;
+			ethernetPacket.PayloadPacket = ipPacket;
 
 			_Device.SendPacket(ethernetPacket);
 		}

@@ -17,7 +17,7 @@ namespace ConnectionBridge
 
 		const int AuthenticationTimeout = 10000;
 
-		static void Main(string[] args)
+		static void Main1(string[] args)
 		{
 			var rawClient = new Adapters.Raw.RawClientAdapter();
 			var rawServer = new Adapters.Raw.RawServerAdapter();
@@ -54,7 +54,7 @@ namespace ConnectionBridge
 			}
 		}
 
-		static async Task Main1(string[] args)
+		static async Task Main(string[] args)
 		{
 			if (args?.Length > 1)
 			{
@@ -104,19 +104,15 @@ namespace ConnectionBridge
 				}
 				else
 				{
-					//await StartClientMode(PromptStringParameter("sslServerAddress"),
-					//						PromptIntParameter("sslServerPort"),
-					//						PromptStringParameter("trustedHostName"),
-					//						PromptStringParameter("udpServerLocalAddress"),
-					//						PromptIntParameter("udpServerLocalPort"),
-					//						PromptStringParameter("udpServerRemoteAddress"),
-					//						PromptIntParameter("udpServerRemotePort")
-					//						);
+					await StartClientMode(PromptStringParameter("sslServerAddress"),
+											PromptIntParameter("sslServerPort"),
+											PromptStringParameter("trustedHostName"),
+											PromptStringParameter("udpServerLocalAddress"),
+											PromptIntParameter("udpServerLocalPort"),
+											PromptStringParameter("udpServerRemoteAddress"),
+											PromptIntParameter("udpServerRemotePort")
+											);
 					
-					//await StartClientMode("51.75.68.16", 42069, "WrexUwU", "127.0.0.1", 1111, "51.75.68.16", 39911);
-					
-					await StartClientMode("159.69.45.213", 8554, "WrexUwU", "127.0.0.1", 1111, "159.69.45.213", 53);
-
 				}
 				while (Console.ReadKey().Key != ConsoleKey.Q) ;
 			}

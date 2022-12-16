@@ -70,16 +70,16 @@ namespace ConnectionBridge
 			_RemoteUdpServerAddress = remoteAddress;
 			_RemoteUdpServerPort = remotePort;
 
-			_LocalAdapter = _ServerMode ? new Adapters.Raw.RawServerAdapter() : new Adapters.Udp.UdpServerAdapter();
+			_LocalAdapter = new Adapters.Udp.UdpServerAdapter();
 			_LocalAdapter.Initialize(_LocalUdpServerAddress, (ushort)_LocalUdpServerPort);
 
-			_RemoteAdapter = _ServerMode ? new Adapters.Udp.UdpClientAdapter() : new Adapters.Raw.RawClientAdapter();
+			_RemoteAdapter =  new Adapters.Udp.UdpClientAdapter();
 			_RemoteAdapter.Initialize(_RemoteUdpServerAddress, (ushort)_RemoteUdpServerPort);
 
 			_LocalAdapter.OnMessageReceived = OnLocalAdapterMessageReceived;
 			_RemoteAdapter.OnMessageReceived = OnRemoteAdapterMessageReceived;
 
-			_Obfuscator = new DnsObfuscator();
+			_Obfuscator = new Xor16BytesObfuscator();
 
 			_LatestHeartbeat = DateTime.Now;
 
@@ -210,27 +210,30 @@ namespace ConnectionBridge
 		{
 			_Timer.Stop();
 			_Timer.Interval = HeartBeatInterval;
-			if (_ServerMode)
+			try
 			{
-				if (_LatestHeartbeat.AddMilliseconds(ConnectionTimeout) < DateTime.Now)
+				if (_ServerMode)
 				{
-					Logger.Info(() => $"Disconnecting peer {_SecureChannel.PeerEndPoint} since its been more than {ConnectionTimeout / 1000} seconds than the latest ping ({_LatestHeartbeat.TimeOfDay})");
-					Dispose();
-					return;
-				}
+					if (_LatestHeartbeat.AddMilliseconds(ConnectionTimeout) < DateTime.Now)
+					{
+						Logger.Info(() => $"Disconnecting peer {_SecureChannel.PeerEndPoint} since its been more than {ConnectionTimeout / 1000} seconds than the latest ping ({_LatestHeartbeat.TimeOfDay})");
+						Dispose();
+						return;
+					}
 
-				if (!IsAuthenticated)
+					if (!IsAuthenticated)
+					{
+						Logger.Info(() => $"Disconnecting peer {_SecureChannel.PeerEndPoint} since its not authenticated in time");
+						Dispose();
+						return;
+					}
+				}
+				else
 				{
-					Logger.Info(() => $"Disconnecting peer {_SecureChannel.PeerEndPoint} since its not authenticated in time");
-					Dispose();
-					return;
+					await _Serializer.Send(new PingMessage());
 				}
 			}
-			else
-			{
-				await _Serializer.Send(new PingMessage());
-			}
-
+			catch { }
 			_Timer.Start();
 		}
 

@@ -1,5 +1,3 @@
-using SharpPcap;
-using SharpPcap.LibPcap;
 using System;
 using System.Linq;
 using System.Net.Sockets;
@@ -16,43 +14,6 @@ namespace ConnectionBridge
 		static bool _ServerMode;
 
 		const int AuthenticationTimeout = 10000;
-
-		static void Main1(string[] args)
-		{
-			var rawClient = new Adapters.Raw.RawClientAdapter();
-			var rawServer = new Adapters.Raw.RawServerAdapter();
-
-			rawClient.Initialize("192.168.1.102", 2222);
-			rawServer.Initialize("192.168.1.102", 2222);
-			
-			rawServer.Start();
-			rawClient.Connect();
-
-			var buffer = Encoding.ASCII.GetBytes("Hello!");
-
-			rawClient.OnMessageReceived = (arg) => 
-			{
-				Console.Write($"Client received packet, {arg.Size}");
-				rawClient.Send(buffer, 0, buffer.Length);
-			};
-
-			rawServer.OnMessageReceived = (arg) => 
-			{
-				Console.WriteLine($"Server received packet, {arg.Size}");
-				rawServer.Send(arg.EndPoint, buffer, 0, buffer.Length);
-			};
-
-			rawClient.ReceiveAsync();
-			rawClient.ReceiveAsync();
-
-			while (true)
-			{
-				rawClient.Send(buffer, 0, buffer.Length);
-
-				Console.Write("Press enter to repeat ...");
-				Console.ReadLine();
-			}
-		}
 
 		static async Task Main(string[] args)
 		{
